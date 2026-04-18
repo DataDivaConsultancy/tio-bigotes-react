@@ -7,14 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, Search, Pencil, Check, X, Users, KeyRound } from 'lucide-react'
 
 interface Empleado {
-  id: number
+  id: numberh
   nombre: string
   email: string
   telefono?: string
   rol: string
   activo: boolean
   permisos: string[]
-  password_temporal?: boolean
+  must_change_password?: boolean
 }
 
 const ROL_OPTIONS = ['superadmin', 'admin', 'operador', 'viewer']
@@ -78,7 +78,7 @@ export default function Empleados() {
     setLoading(true)
     let query = supabase
       .from('empleados_v2')
-      .select('id, nombre, email, telefono, rol, activo, permisos, password_temporal')
+      .select('id, nombre, email, telefono, rol, activo, permisos, must_change_password')
       .order('nombre')
 
     if (!showInactive) query = query.eq('activo', true)
