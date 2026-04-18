@@ -10,7 +10,7 @@ export interface User {
   rol: string
   activo: boolean
   permisos?: string[]
-  password_temporal?: boolean
+  must_change_password?: boolean
 }
 
 interface AuthContextType {
@@ -29,7 +29,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Restore session from localStorage
     const saved = localStorage.getItem('tb_user')
     if (saved) {
       try {
@@ -43,9 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const hashed = await hashPassword(password)
+
     const { data, error } = await supabase
       .from('empleados_v2')
-      .select('id,nombre,email,telefono,rol,activo,permisos,password_hash,password_temporal')
+      .select('id,nombre,email,telefono,rol,activo,permisos,password_hash,must_change_password')
       .eq('email', email.toLowerCase().trim())
       .eq('activo', true)
       .limit(1)
@@ -67,13 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       rol: data.rol,
       activo: data.activo,
       permisos: data.permisos || [],
-      password_temporal: data.password_temporal,
+      must_change_password: data.must_change_password,
     }
 
     setUser(userData)
     localStorage.setItem('tb_user', JSON.stringify(userData))
 
-    // Log activity
     try {
       await supabase.rpc('rpc_registrar_actividad', {
         p_empleado_id: userData.id,
