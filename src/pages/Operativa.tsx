@@ -58,7 +58,7 @@ export default function Operativa() {
     const [selectedCategoria, setSelectedCategoria] = useState<number | null>(null)
     const [productos, setProductos] = useState<Producto[]>([])
     const [rows, setRows] = useState<ControlRow[]>([])
-    const [loading, setLoading] = useState(true)
+    const [loading, setLoading] = useState(false)
     const [saving, setSaving] = useState(false)
     const [savedMsg, setSavedMsg] = useState('')
     const [fecha] = useState(todayStr())
@@ -336,13 +336,13 @@ export default function Operativa() {
                                                                                     </select>
                                                                   </div>
                                                     <div>
-                                                                    <label className="text-sm font-medium text-muted-foreground mb-1 block">CategorÃ­a</label>
+                                                                    <label className="text-sm font-medium text-muted-foreground mb-1 block">Categoría</label>
                                                                     <select
                                                                                       className="border rounded-md px-3 py-2 text-sm bg-background"
                                                                                       value={selectedCategoria ?? ''}
                                                                                       onChange={e => setSelectedCategoria(Number(e.target.value) || null)}
                                                                                     >
-                                                                                      <option value="">Seleccionar categorÃ­a...</option>
+                                                                                      <option value="">Seleccionar categoría...</option>
                                                                                       {categorias.map(c => (
                                                                                                         <option key={c.id} value={c.id}>{c.nombre}</option>
                                                                                                       ))}
@@ -356,7 +356,7 @@ export default function Operativa() {
                 {!selectedCategoria ? (
                   <Card>
                               <CardContent className="py-12 text-center text-muted-foreground">
-                                            SeleccionÃ¡ una categorÃ­a para ver los productos.
+                                            Seleccioná una categoría para ver los productos.
                                           </CardContent>
                             </Card>
                 ) : loading ? (
@@ -368,7 +368,7 @@ export default function Operativa() {
                 ) : rows.length === 0 ? (
                   <Card>
                               <CardContent className="py-12 text-center text-muted-foreground">
-                                            No hay productos visibles en control diario para esta categorÃ­a.
+                                            No hay productos visibles en control diario para esta categoría.
                                           </CardContent>
                             </Card>
                 ) : (
