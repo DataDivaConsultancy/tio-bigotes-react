@@ -9,12 +9,39 @@ import { formatDate, formatNumber } from '@/lib/utils'
 
 const EXPECTED_FIELDS = [
   'fecha',
+  'hora',
+  'ticket_numero',
   'local',
-  'producto',
+  'caja',
+  'cliente',
+  'empleado',
   'cantidad',
-  'precio_unitario',
-  'importe_total',
+  'articulo',
+  'subarticulo',
+  'base',
+  'impuestos',
+  'dto_total',
+  'neto',
 ] as const
+
+const FIELD_LABELS: Record<string, string> = {
+  fecha: 'Fecha',
+  hora: 'Hora',
+  ticket_numero: 'Nº Ticket',
+  local: 'Establecimiento',
+  caja: 'Caja',
+  cliente: 'Cliente',
+  empleado: 'Empleado',
+  cantidad: 'Uds. Vendidas',
+  articulo: 'Artículo',
+  subarticulo: 'Subartículo',
+  base: 'Base',
+  impuestos: 'Impuestos',
+  dto_total: 'Dto Total',
+  neto: 'Neto',
+}
+
+const NUMERIC_FIELDS = ['cantidad', 'base', 'impuestos', 'dto_total', 'neto']
 
 type ExpectedField = (typeof EXPECTED_FIELDS)[number]
 
@@ -93,7 +120,6 @@ export default function CargaVentas() {
   }
 
   // --- File handling ---
-
   const handleFile = useCallback((selectedFile: File) => {
     if (!selectedFile.name.endsWith('.csv')) {
       setParseError('Solo se aceptan archivos .csv')
@@ -114,12 +140,35 @@ export default function CargaVentas() {
         setCsvColumns(columns)
         setParsedData(results.data)
 
-        // Auto-map columns
+        // Auto-map columns by name similarity
         const mapping: ColumnMapping = {}
+        const autoMap: Record<string, ExpectedField> = {
+          'fecha': 'fecha',
+          'hora': 'hora',
+          'serie / número': 'ticket_numero',
+          'serie/número': 'ticket_numero',
+          'serie / numero': 'ticket_numero',
+          'establecimiento': 'local',
+          'caja': 'caja',
+          'cliente': 'cliente',
+          'empleado': 'empleado',
+          'uds.v': 'cantidad',
+          'uds v': 'cantidad',
+          'unidades': 'cantidad',
+          'artículo': 'articulo',
+          'articulo': 'articulo',
+          'subartículo': 'subarticulo',
+          'subarticulo': 'subarticulo',
+          'base': 'base',
+          'impuestos': 'impuestos',
+          'dto total': 'dto_total',
+          'dto_total': 'dto_total',
+          'neto': 'neto',
+        }
+
         columns.forEach((col) => {
           const normalized = col.toLowerCase().trim()
-          const match = EXPECTED_FIELDS.find((f) => f === normalized)
-          mapping[col] = match || ''
+          mapping[col] = autoMap[normalized] || ''
         })
 
         // Apply saved mapping if available
@@ -169,7 +218,6 @@ export default function CargaVentas() {
   )
 
   // --- Column mapping ---
-
   function updateMapping(csvCol: string, targetField: ExpectedField | '') {
     setColumnMapping((prev) => ({ ...prev, [csvCol]: targetField }))
   }
@@ -180,13 +228,13 @@ export default function CargaVentas() {
 
   function getUnmappedRequired(): ExpectedField[] {
     const mapped = getMappedFields()
-    return EXPECTED_FIELDS.filter((f) => !mapped.includes(f))
+    const required: ExpectedField[] = ['fecha', 'articulo', 'cantidad']
+    return required.filter((f) => !mapped.includes(f))
   }
 
   // --- Validation ---
-
   function validateRows(): { valid: Record<string, string>[]; errorIndices: number[] } {
-    const requiredFields: ExpectedField[] = ['fecha', 'producto', 'cantidad']
+    const requiredFields: ExpectedField[] = ['fecha', 'articulo', 'cantidad']
     const reverseMap: Record<string, string> = {}
     Object.entries(columnMapping).forEach(([csvCol, field]) => {
       if (field) reverseMap[field] = csvCol
@@ -203,7 +251,7 @@ export default function CargaVentas() {
       if (hasRequired) {
         valid.push(row)
       } else {
-        errorIndices.push(idx + 1) // 1-based for display
+        errorIndices.push(idx + 1)
       }
     })
 
@@ -211,7 +259,6 @@ export default function CargaVentas() {
   }
 
   // --- Import ---
-
   async function handleImport() {
     setStep('importing')
     setImporting(true)
@@ -231,7 +278,7 @@ export default function CargaVentas() {
         const csvCol = reverseMap[field]
         if (csvCol) {
           const val = row[csvCol]?.toString().trim() ?? ''
-          if (field === 'cantidad' || field === 'precio_unitario' || field === 'importe_total') {
+          if (NUMERIC_FIELDS.includes(field)) {
             const num = parseFloat(val.replace(',', '.'))
             mapped[field] = isNaN(num) ? null : num
           } else {
@@ -283,7 +330,6 @@ export default function CargaVentas() {
   }
 
   // --- Reset ---
-
   function resetAll() {
     setStep('select')
     setFile(null)
@@ -297,7 +343,6 @@ export default function CargaVentas() {
   }
 
   // --- Render ---
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -371,7 +416,6 @@ export default function CargaVentas() {
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Total de filas: <span className="font-semibold">{formatNumber(parsedData.length, 0)}</span>
             </p>
-
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
                 <thead>
@@ -403,7 +447,6 @@ export default function CargaVentas() {
                 Mostrando 10 de {formatNumber(parsedData.length, 0)} filas
               </p>
             )}
-
             <div className="flex justify-end">
               <Button onClick={() => setStep('mapping')}>
                 Continuar a mapeo de columnas
@@ -428,7 +471,6 @@ export default function CargaVentas() {
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Asigná cada columna del CSV al campo correspondiente de ventas.
             </p>
-
             <div className="space-y-3">
               {csvColumns.map((col) => (
                 <div key={col} className="flex items-center gap-4">
@@ -448,7 +490,8 @@ export default function CargaVentas() {
                       )
                       return (
                         <option key={field} value={field} disabled={alreadyMapped}>
-                          {field} {alreadyMapped ? '(ya asignado)' : ''}
+                          {FIELD_LABELS[field] || field}
+                          {alreadyMapped ? ' (ya asignado)' : ''}
                         </option>
                       )
                     })}
@@ -464,8 +507,8 @@ export default function CargaVentas() {
               <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">Campos sin asignar:</p>
-                  <p>{getUnmappedRequired().join(', ')}</p>
+                  <p className="font-medium">Campos obligatorios sin asignar:</p>
+                  <p>{getUnmappedRequired().map((f) => FIELD_LABELS[f] || f).join(', ')}</p>
                 </div>
               </div>
             )}
@@ -478,7 +521,7 @@ export default function CargaVentas() {
                   <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                   <p>
                     <span className="font-medium">{errorIndices.length} filas con errores</span>{' '}
-                    (campos requeridos vacíos: fecha, producto, cantidad). Estas filas no se importarán.
+                    (campos requeridos vacíos: fecha, artículo, cantidad). Estas filas no se importarán.
                   </p>
                 </div>
               ) : null
