@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import Login from '@/pages/Login'
+import CambiarPassword from '@/pages/CambiarPassword'
 import Home from '@/pages/Home'
 import Productos from '@/pages/Productos'
 import Empleados from '@/pages/Empleados'
@@ -25,6 +26,9 @@ function AppRoutes() {
       {/* Public */}
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
 
+      {/* Cambiar contraseña - requires auth but not full protected route */}
+      <Route path="/cambiar-password" element={user ? <CambiarPassword /> : <Navigate to="/login" replace />} />
+
       {/* Protected */}
       <Route
         element={
@@ -34,23 +38,28 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<Home />} />
+
         {/* Gestión */}
         <Route path="/productos" element={<ProtectedRoute screen="Productos"><Productos /></ProtectedRoute>} />
         <Route path="/empleados" element={<ProtectedRoute screen="Empleados"><Empleados /></ProtectedRoute>} />
+
         {/* Operaciones */}
         <Route path="/operativa" element={<ProtectedRoute screen="Operativa"><Operativa /></ProtectedRoute>} />
         <Route path="/bi" element={<ProtectedRoute screen="BI"><BI /></ProtectedRoute>} />
         <Route path="/forecast" element={<ProtectedRoute screen="Forecast"><Forecast /></ProtectedRoute>} />
         <Route path="/pendientes" element={<ProtectedRoute screen="Pendientes"><Pendientes /></ProtectedRoute>} />
+
         {/* Datos */}
         <Route path="/carga-ventas" element={<ProtectedRoute screen="CargaVentas"><CargaVentas /></ProtectedRoute>} />
         <Route path="/auditoria" element={<ProtectedRoute screen="Auditoria"><Auditoria /></ProtectedRoute>} />
+
         {/* Compras */}
         <Route path="/proveedores" element={<ProtectedRoute screen="Proveedores"><Proveedores /></ProtectedRoute>} />
         <Route path="/productos-compra" element={<ProtectedRoute screen="ProductosCompra"><ProductosCompra /></ProtectedRoute>} />
         <Route path="/locales" element={<ProtectedRoute screen="Locales"><Locales /></ProtectedRoute>} />
         <Route path="/stock" element={<ProtectedRoute screen="Stock"><Stock /></ProtectedRoute>} />
       </Route>
+
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
