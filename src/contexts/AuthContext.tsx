@@ -18,6 +18,7 @@ interface AuthContextType {
   loading: boolean
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => void
+  updateUser: (updates: Partial<User>) => void
   isSuperadmin: boolean
   hasAccess: (screen: string) => boolean
 }
@@ -89,6 +90,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('tb_user')
   }
 
+  const updateUser = (updates: Partial<User>) => {
+    if (user) {
+      const updated = { ...user, ...updates }
+      setUser(updated)
+      localStorage.setItem('tb_user', JSON.stringify(updated))
+    }
+  }
+
   const isSuperadmin = user?.rol === 'superadmin'
 
   const hasAccess = (screen: string) => {
@@ -99,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isSuperadmin, hasAccess }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser, isSuperadmin, hasAccess }}>
       {children}
     </AuthContext.Provider>
   )
