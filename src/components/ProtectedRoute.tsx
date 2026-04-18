@@ -19,6 +19,8 @@ export default function ProtectedRoute({ children, screen }: Props) {
 
   if (!user) return <Navigate to="/login" replace />
 
+  if (user.must_change_password) return <Navigate to="/cambiar-password" replace />
+
   if (screen && !hasAccess(screen)) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
