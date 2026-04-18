@@ -29,7 +29,7 @@ export default function Login() {
     if (result.ok) {
       navigate('/')
     } else {
-      setError(result.error || 'Error al iniciar sesion')
+      setError(result.error || 'Error al iniciar sesión')
     }
   }
 
@@ -62,7 +62,7 @@ export default function Login() {
         setResetLoading(false)
         return
       }
-      setResetSuccess('Contrasena temporal para ' + user.nombre + ': ' + tempPassword + ' - Cambiala despues de iniciar sesion.')
+      setResetSuccess('Contraseña temporal para ' + user.nombre + ': ' + tempPassword + ' - Cámbiala después de iniciar sesión.')
     } catch {
       setError('Error inesperado. Intenta de nuevo.')
     }
@@ -76,9 +76,9 @@ export default function Login() {
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold text-2xl mx-auto mb-4 shadow-lg shadow-orange-500/30">
             TB
           </div>
-          <h1 className="text-2xl font-bold text-white">Tio Bigotes</h1>
+          <h1 className="text-2xl font-bold text-white">Tío Bigotes</h1>
           <p className="text-slate-400 text-sm mt-1">
-            {resetMode ? 'Recuperar contrasena' : 'Panel de gestion'}
+            {resetMode ? 'Recuperar contraseña' : 'Panel de gestión'}
           </p>
         </div>
 
@@ -92,11 +92,11 @@ export default function Login() {
             {resetSuccess && (<div className="bg-green-50 text-green-700 text-sm rounded-lg p-3 border border-green-200">{resetSuccess}</div>)}
             {!resetSuccess && (
               <Button type="submit" className="w-full h-11" disabled={resetLoading}>
-                {resetLoading ? (<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />) : (<><Mail size={16} />Restablecer contrasena</>)}
+                {resetLoading ? (<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />) : (<><Mail size={16} />Restablecer contraseña</>)}
               </Button>
             )}
             <button type="button" onClick={() => { setResetMode(false); setError(''); setResetSuccess(''); }} className="w-full text-sm text-slate-500 hover:text-orange-500 flex items-center justify-center gap-1.5 mt-2">
-              <ArrowLeft size={14} />Volver al inicio de sesion
+              <ArrowLeft size={14} />Volver al inicio de sesión
             </button>
           </form>
         ) : (
@@ -106,9 +106,9 @@ export default function Login() {
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" required autoFocus />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Contrasena</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Contraseña</label>
               <div className="relative">
-                <Input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="********" required className="pr-10" />
+                <Input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className="pr-10" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -119,13 +119,13 @@ export default function Login() {
               {loading ? (<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />) : (<><LogIn size={16} />Entrar</>)}
             </Button>
             <button type="button" onClick={() => { setResetMode(true); setError(''); }} className="w-full text-sm text-slate-500 hover:text-orange-500 mt-1">
-              Olvidaste tu contrasena?
+              ¿Olvidaste tu contraseña?
             </button>
           </form>
         )}
 
         <p className="text-center text-slate-500 text-xs mt-6">
-          Tio Bigotes Pro &copy; {new Date().getFullYear()}
+          Tío Bigotes Pro &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>
