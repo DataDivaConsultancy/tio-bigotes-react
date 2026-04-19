@@ -17,21 +17,10 @@ interface Empleado {
   must_change_password?: boolean
 }
 
-const ROL_OPTIONS = ['superadmin', 'admin', 'operador', 'viewer']
-
 const PERMISOS_OPTIONS = [
-  'Productos',
-  'Empleados',
-  'Operativa',
-  'BI',
-  'Forecast',
-  'Pendientes',
-  'CargaVentas',
-  'Auditoria',
-  'Proveedores',
-  'ProductosCompra',
-  'Locales',
-  'Stock',
+  'Productos', 'Empleados', 'Operativa', 'BI', 'Forecast',
+  'Pendientes', 'CargaVentas', 'Auditoria', 'Proveedores',
+  'ProductosCompra', 'Locales', 'Stock',
 ]
 
 const ROL_COLORS: Record<string, string> = {
@@ -61,17 +50,37 @@ export default function Empleados() {
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [emailSent, setEmailSent] = useState<{ to: string; password: string } | null>(null)
-
+  const [rolOptions, setRolOptions] = useState<string[]>([])
   const [form, setForm] = useState<EmpleadoForm>({
-    nombre: '',
-    apellido: '',
-    email: '',
-    telefono: '',
-    rol: 'operador',
-    activo: true,
-    permisos: [],
-    password: '',
+    nombre: '', apellido: '', email: '', telefono: '',
+    rol: '', activo: true, permisos: [], password: '',
   })
+
+  /* ---------- Load roles from roles_v2 ---------- */
+  async function loadRoles() {
+    const { data, error } = await supabase
+      .from('roles_v2')
+      .select('rol')
+      .order('rol')
+    if (data && data.length > 0) {
+      const roles = data.map((r: any) => r.rol)
+      roles.sort((a: string, b: string) => {
+        if (a === 'superadmin') return -1
+        if (b === 'superadmin') return 1
+        return a.localeCompare(b)
+      })
+      setRolOptions(roles)
+    } else {
+      const { data: empData } = await supabase
+        .from('empleados_v2')
+        .select('rol')
+      if (empData) {
+        const unique = [...new Set(empData.map((e: any) => e.rol).filter(Boolean))]
+        unique.sort()
+        setRolOptions(unique as string[])
+      }
+    }
+  }
 
   async function loadEmpleados() {
     setLoading(true)
@@ -86,6 +95,10 @@ export default function Empleados() {
     setEmpleados(data || [])
     setLoading(false)
   }
+
+  useEffect(() => {
+    loadRoles()
+  }, [])
 
   useEffect(() => {
     loadEmpleados()
@@ -104,14 +117,9 @@ export default function Empleados() {
     setEditing(null)
     setEmailSent(null)
     setForm({
-      nombre: '',
-      apellido: '',
-      email: '',
-      telefono: '',
-      rol: 'operador',
-      activo: true,
-      permisos: [],
-      password: '',
+      nombre: '', apellido: '', email: '', telefono: '',
+      rol: rolOptions.length > 0 ? rolOptions[0] : '',
+      activo: true, permisos: [], password: '',
     })
   }
 
@@ -119,19 +127,14 @@ export default function Empleados() {
     setEditing(emp)
     setCreating(false)
     setEmailSent(null)
-    // Split nombre into nombre + apellido (first word = nombre, rest = apellido)
     const parts = (emp.nombre || '').trim().split(/\s+/)
     const firstName = parts[0] || ''
     const lastName = parts.slice(1).join(' ')
     setForm({
-      nombre: firstName,
-      apellido: lastName,
-      email: emp.email,
-      telefono: emp.telefono || '',
-      rol: emp.rol,
-      activo: emp.activo,
-      permisos: emp.permisos || [],
-      password: '',
+      nombre: firstName, apellido: lastName,
+      email: emp.email, telefono: emp.telefono || '',
+      rol: emp.rol, activo: emp.activo,
+      permisos: emp.permisos || [], password: '',
     })
   }
 
@@ -140,26 +143,18 @@ export default function Empleados() {
     setCreating(false)
     setEmailSent(null)
     setForm({
-      nombre: '',
-      apellido: '',
-      email: '',
-      telefono: '',
-      rol: 'operador',
-      activo: true,
-      permisos: [],
-      password: '',
+      nombre: '', apellido: '', email: '', telefono: '',
+      rol: rolOptions.length > 0 ? rolOptions[0] : '',
+      activo: true, permisos: [], password: '',
     })
   }
 
   async function save() {
     if (!form.nombre.trim() || !form.apellido.trim() || !form.email.trim()) return
     setSaving(true)
-
-    // Concatenate nombre + apellido for storage
     const fullName = `${form.nombre.trim()} ${form.apellido.trim()}`
 
     if (creating) {
-      // Auto-generate password for new employees
       const tempPassword = generateTempPassword()
       const passwordHash = await hashPassword(tempPassword)
       const { error } = await supabase.from('empleados_v2').insert({
@@ -176,7 +171,6 @@ export default function Empleados() {
         setSaving(false)
         return
       }
-      // Show email notification with password
       setEmailSent({ to: form.email, password: tempPassword })
       await loadEmpleados()
     } else if (editing) {
@@ -199,7 +193,6 @@ export default function Empleados() {
       setEditing(null)
       await loadEmpleados()
     }
-
     if (!emailSent) {
       cancel()
     }
@@ -224,12 +217,10 @@ export default function Empleados() {
     if (!editing) return
     const tempPassword = generateTempPassword()
     const hash = await hashPassword(tempPassword)
-
     const result = await rpcCall('rpc_reset_password', {
       p_empleado_id: editing.id,
       p_new_hash: hash,
     })
-
     if (result.ok) {
       setEmailSent({ to: editing.email, password: tempPassword })
     } else {
@@ -287,19 +278,15 @@ export default function Empleados() {
           <CardContent className="pt-4 pb-4">
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-2 text-green-800 font-medium">
-                <Check size={18} />
-                Empleado creado correctamente
+                <Check size={18} /> Empleado creado correctamente
               </div>
               <div className="text-sm text-green-700 space-y-1">
                 <p><strong>Email:</strong> {emailSent.to}</p>
                 <p><strong>Contrasena temporal:</strong> <code className="bg-green-100 px-2 py-0.5 rounded text-base font-mono">{emailSent.password}</code></p>
               </div>
               <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => sendWelcomeEmail(emailSent.to, emailSent.password)}
-                  className="gap-1.5 bg-green-600 hover:bg-green-700"
-                >
+                <Button size="sm" onClick={() => sendWelcomeEmail(emailSent.to, emailSent.password)}
+                  className="gap-1.5 bg-green-600 hover:bg-green-700">
                   <Mail size={14} /> Enviar email con credenciales
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => {
@@ -308,9 +295,7 @@ export default function Empleados() {
                 }}>
                   Copiar contrasena
                 </Button>
-                <Button size="sm" variant="ghost" onClick={cancel}>
-                  Cerrar
-                </Button>
+                <Button size="sm" variant="ghost" onClick={cancel}>Cerrar</Button>
               </div>
             </div>
           </CardContent>
@@ -354,7 +339,7 @@ export default function Empleados() {
                   value={form.rol}
                   onChange={(e) => setForm({ ...form, rol: e.target.value })}
                 >
-                  {ROL_OPTIONS.map(r => (
+                  {rolOptions.map(r => (
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
@@ -373,7 +358,6 @@ export default function Empleados() {
                 </div>
               )}
             </div>
-
             {/* Permisos */}
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-2 block">Permisos</label>
@@ -404,13 +388,11 @@ export default function Empleados() {
                 })}
               </div>
             </div>
-
             {creating && (
               <p className="text-xs text-muted-foreground">
                 Se generara automaticamente una contrasena temporal que podras enviar por email al empleado.
               </p>
             )}
-
             <div className="flex gap-2 pt-2">
               <Button onClick={save} disabled={saving || !form.nombre.trim() || !form.apellido.trim() || !form.email.trim()}>
                 {saving ? 'Guardando...' : creating ? 'Crear empleado' : 'Guardar cambios'}
