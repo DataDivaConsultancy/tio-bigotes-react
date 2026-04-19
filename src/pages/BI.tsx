@@ -1,17 +1,19 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils'
-import { BarChart3, RefreshCw, Calendar } from 'lucide-react'
+import { BarChart3, RefreshCw, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell,
 } from 'recharts'
 
+
 interface Local {
   id: number
   nombre: string
 }
+
 
 interface VentaRow {
   id: number
@@ -25,20 +27,24 @@ interface VentaRow {
   importe_total: number
 }
 
+
 interface DailySales {
   fecha: string
   total: number
 }
+
 
 interface ProductoRanking {
   producto: string
   total: number
 }
 
+
 interface LocalSales {
   local: string
   total: number
 }
+
 
 interface ProductBreakdown {
   producto: string
@@ -47,10 +53,21 @@ interface ProductBreakdown {
   porcentaje: number
 }
 
+
+interface CategoriaRanking {
+  categoria: string
+  importe: number
+  cantidad: number
+  porcentaje: number
+  productos: ProductBreakdown[]
+}
+
+
 const COLORS = [
   '#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899',
   '#f59e0b', '#06b6d4', '#84cc16', '#ef4444', '#6366f1',
 ]
+
 
 /* ------------------------------------------------------------------ */
 /*  Date helpers                                                       */
@@ -59,30 +76,34 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
+
 function daysAgo(n: number): string {
   const d = new Date()
   d.setDate(d.getDate() - n)
   return d.toISOString().slice(0, 10)
 }
 
+
 function startOfMonth(): string {
   const d = new Date()
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
 }
+
 
 function startOfYear(): string {
   const d = new Date()
   return new Date(d.getFullYear(), 0, 1).toISOString().slice(0, 10)
 }
 
+
 type DatePreset = 'ayer' | '7dias' | '30dias' | 'este_mes' | 'este_ano' | 'personalizado'
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'ayer', label: 'Ayer' },
-  { key: '7dias', label: '\u00DAltimos 7 d\u00EDas' },
-  { key: '30dias', label: '\u00DAltimos 30 d\u00EDas' },
+  { key: '7dias', label: 'Últimos 7 días' },
+  { key: '30dias', label: 'Últimos 30 días' },
   { key: 'este_mes', label: 'Este mes' },
-  { key: 'este_ano', label: 'Este A\u00F1o' },
+  { key: 'este_ano', label: 'Este Año' },
   { key: 'personalizado', label: 'Personalizado' },
 ]
 
@@ -108,6 +129,7 @@ function getPresetDates(preset: DatePreset): { desde: string; hasta: string } {
   }
 }
 
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -119,15 +141,24 @@ export default function BI() {
   const [selectedLocal, setSelectedLocal] = useState<string>('')
   const [ventas, setVentas] = useState<VentaRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [categoriaMap, setCategoriaMap] = useState<Map<string, string>>(new Map())
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
 
-  /* ---------- Load locales ---------- */
+  /* ---------- Load locales + product categories ---------- */
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('locales_v2')
-        .select('id, nombre')
-        .order('nombre')
-      if (data) setLocales(data)
+      const [localesRes, productosRes] = await Promise.all([
+        supabase.from('locales_v2').select('id, nombre').order('nombre'),
+        supabase.from('productos_v2').select('nombre, categoria'),
+      ])
+      if (localesRes.data) setLocales(localesRes.data)
+      if (productosRes.data) {
+        const map = new Map<string, string>()
+        productosRes.data.forEach((p: any) => {
+          if (p.nombre && p.categoria) map.set(p.nombre, p.categoria)
+        })
+        setCategoriaMap(map)
+      }
     }
     load()
   }, [])
@@ -198,8 +229,19 @@ export default function BI() {
     loadVentas()
   }, [loadVentas])
 
+  /* ---------- Toggle category expansion ---------- */
+  function toggleCat(cat: string) {
+    setExpandedCats(prev => {
+      const next = new Set(prev)
+      if (next.has(cat)) next.delete(cat)
+      else next.add(cat)
+      return next
+    })
+  }
+
   /* ---------- Derived data ---------- */
   const totalImporte = ventas.reduce((s, v) => s + (v.importe_total || 0), 0)
+
   // Count distinct tickets instead of rows
   const numTransacciones = new Set(ventas.map(v => v.ticket_numero).filter(Boolean)).size
   const ticketMedio = numTransacciones > 0 ? totalImporte / numTransacciones : 0
@@ -209,7 +251,7 @@ export default function BI() {
   ventas.forEach((v) => {
     productoMap.set(v.producto, (productoMap.get(v.producto) || 0) + v.importe_total)
   })
-  const topProducto = [...productoMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '\u2014'
+  const topProducto = [...productoMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '—'
 
   // Chart 1: daily sales
   const dailyMap = new Map<string, number>()
@@ -248,6 +290,54 @@ export default function BI() {
       porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
     }))
 
+  // ---- RANKING POR CATEGORÍA ----
+  const catImporteMap = new Map<string, number>()
+  const catCantidadMap = new Map<string, number>()
+  const catProductosMap = new Map<string, Map<string, { importe: number; cantidad: number }>>()
+
+  ventas.forEach((v) => {
+    const cat = categoriaMap.get(v.producto) || 'Sin categoría'
+    catImporteMap.set(cat, (catImporteMap.get(cat) || 0) + v.importe_total)
+    catCantidadMap.set(cat, (catCantidadMap.get(cat) || 0) + v.cantidad)
+
+    if (!catProductosMap.has(cat)) catProductosMap.set(cat, new Map())
+    const prodMap = catProductosMap.get(cat)!
+    const existing = prodMap.get(v.producto) || { importe: 0, cantidad: 0 }
+    prodMap.set(v.producto, {
+      importe: existing.importe + v.importe_total,
+      cantidad: existing.cantidad + v.cantidad,
+    })
+  })
+
+  const categoriaRanking: CategoriaRanking[] = [...catImporteMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([categoria, importe]) => {
+      const productos = catProductosMap.get(categoria)!
+      const prodList: ProductBreakdown[] = [...productos.entries()]
+        .sort((a, b) => b[1].importe - a[1].importe)
+        .map(([producto, data]) => ({
+          producto,
+          cantidad: data.cantidad,
+          importe: Math.round(data.importe * 100) / 100,
+          porcentaje: importe > 0 ? Math.round((data.importe / importe) * 10000) / 100 : 0,
+        }))
+
+      return {
+        categoria,
+        importe: Math.round(importe * 100) / 100,
+        cantidad: catCantidadMap.get(categoria) || 0,
+        porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
+        productos: prodList,
+      }
+    })
+
+  // Category chart data (for bar chart)
+  const catChartData = categoriaRanking.map(c => ({
+    categoria: c.categoria,
+    total: c.importe,
+  }))
+
+
   /* ---------- Render ---------- */
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -258,7 +348,7 @@ export default function BI() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Business Intelligence</h1>
-          <p className="text-muted-foreground text-sm">Analisis de ventas</p>
+          <p className="text-muted-foreground text-sm">Análisis de ventas</p>
         </div>
       </div>
 
@@ -406,6 +496,79 @@ export default function BI() {
             </CardContent>
           </Card>
 
+          {/* Ranking por Categoría */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ranking por categoría</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={Math.max(200, catChartData.length * 40)}>
+                <BarChart data={catChartData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="categoria" tick={{ fontSize: 11 }} width={140} />
+                  <Tooltip formatter={(val: number) => formatCurrency(val)} />
+                  <Bar dataKey="total" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Desglose por categoría con productos expandibles */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ventas por categoría y producto</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2 pr-4 font-medium">Categoría / Producto</th>
+                    <th className="py-2 px-4 font-medium text-right">Cantidad</th>
+                    <th className="py-2 px-4 font-medium text-right">Importe</th>
+                    <th className="py-2 pl-4 font-medium text-right">% del total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categoriaRanking.map((cat, ci) => (
+                    <Fragment key={cat.categoria}>
+                      <tr
+                        className="border-b bg-gray-50 cursor-pointer hover:bg-gray-100"
+                        onClick={() => toggleCat(cat.categoria)}
+                      >
+                        <td className="py-2.5 pr-4 font-semibold text-foreground">
+                          <div className="flex items-center gap-2">
+                            {expandedCats.has(cat.categoria) ? (
+                              <ChevronDown size={16} className="text-muted-foreground" />
+                            ) : (
+                              <ChevronRight size={16} className="text-muted-foreground" />
+                            )}
+                            <span
+                              className="inline-block w-3 h-3 rounded-full mr-1"
+                              style={{ backgroundColor: COLORS[ci % COLORS.length] }}
+                            />
+                            {cat.categoria}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-semibold">{formatNumber(cat.cantidad)}</td>
+                        <td className="py-2.5 px-4 text-right font-semibold">{formatCurrency(cat.importe)}</td>
+                        <td className="py-2.5 pl-4 text-right font-semibold text-muted-foreground">{cat.porcentaje}%</td>
+                      </tr>
+                      {expandedCats.has(cat.categoria) && cat.productos.map((p) => (
+                        <tr key={`${cat.categoria}-${p.producto}`} className="border-b">
+                          <td className="py-1.5 pr-4 pl-10 text-foreground">{p.producto}</td>
+                          <td className="py-1.5 px-4 text-right">{formatNumber(p.cantidad)}</td>
+                          <td className="py-1.5 px-4 text-right">{formatCurrency(p.importe)}</td>
+                          <td className="py-1.5 pl-4 text-right text-muted-foreground text-xs">{p.porcentaje}% de cat.</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+
           {/* Top Productos + Ventas por Local */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
@@ -424,7 +587,6 @@ export default function BI() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Ventas por local</CardTitle>
@@ -436,9 +598,12 @@ export default function BI() {
                       data={localSales}
                       dataKey="total"
                       nameKey="local"
-                      cx="50%" cy="50%"
+                      cx="50%"
+                      cy="50%"
                       outerRadius={100}
-                      label={({ local, percent }) => `${local} ${(percent * 100).toFixed(0)}%`}
+                      label={({ local, percent }) =>
+                        `${local} ${(percent * 100).toFixed(0)}%`
+                      }
                     >
                       {localSales.map((_, i) => (
                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
