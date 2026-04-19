@@ -78,27 +78,32 @@ type DatePreset = 'ayer' | '7dias' | '30dias' | 'este_mes' | 'este_ano' | 'perso
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'ayer', label: 'Ayer' },
-  { key: '7dias', label: 'Ultimos 7 dias' },
-  { key: '30dias', label: 'Ultimos 30 dias' },
+  { key: '7dias', label: '\u00DAltimos 7 d\u00EDas' },
+  { key: '30dias', label: '\u00DAltimos 30 d\u00EDas' },
   { key: 'este_mes', label: 'Este mes' },
-  { key: 'este_ano', label: 'Este ano' },
+  { key: 'este_ano', label: 'Este A\u00F1o' },
   { key: 'personalizado', label: 'Personalizado' },
 ]
 
+function yesterdayStr(): string {
+  return daysAgo(1)
+}
+
 function getPresetDates(preset: DatePreset): { desde: string; hasta: string } {
+  const yesterday = yesterdayStr()
   switch (preset) {
     case 'ayer':
-      return { desde: daysAgo(1), hasta: daysAgo(1) }
+      return { desde: yesterday, hasta: yesterday }
     case '7dias':
-      return { desde: daysAgo(7), hasta: todayStr() }
+      return { desde: daysAgo(8), hasta: yesterday }
     case '30dias':
-      return { desde: daysAgo(30), hasta: todayStr() }
+      return { desde: daysAgo(30), hasta: yesterday }
     case 'este_mes':
-      return { desde: startOfMonth(), hasta: todayStr() }
+      return { desde: startOfMonth(), hasta: yesterday }
     case 'este_ano':
-      return { desde: startOfYear(), hasta: todayStr() }
+      return { desde: startOfYear(), hasta: yesterday }
     case 'personalizado':
-      return { desde: daysAgo(30), hasta: todayStr() }
+      return { desde: daysAgo(30), hasta: yesterday }
   }
 }
 
@@ -303,7 +308,7 @@ export default function BI() {
             {datePreset !== 'personalizado' && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar size={14} />
-                <span>{fechaDesde} â {fechaHasta}</span>
+                <span>{fechaDesde} — {fechaHasta}</span>
               </div>
             )}
             <div>
