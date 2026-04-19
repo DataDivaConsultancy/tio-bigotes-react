@@ -113,7 +113,7 @@ function getPresetDates(preset: DatePreset): { desde: string; hasta: string } {
 export default function BI() {
   const [datePreset, setDatePreset] = useState<DatePreset>('30dias')
   const [fechaDesde, setFechaDesde] = useState(daysAgo(30))
-  const [fechaHasta, setFechaHasta] = useState(todayStr())
+  const [fechaHasta, setFechaHasta] = useState(yesterdayStr())
   const [locales, setLocales] = useState<Local[]>([])
   const [selectedLocal, setSelectedLocal] = useState<string>('')
   const [ventas, setVentas] = useState<VentaRow[]>([])
