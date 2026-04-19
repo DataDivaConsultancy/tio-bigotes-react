@@ -16,6 +16,7 @@ interface Local {
 interface VentaRow {
   id: number
   fecha: string
+  ticket_numero: string
   producto: string
   local: string
   local_id: number
@@ -199,7 +200,8 @@ export default function BI() {
 
   /* ---------- Derived data ---------- */
   const totalImporte = ventas.reduce((s, v) => s + (v.importe_total || 0), 0)
-  const numTransacciones = ventas.length
+  // Count distinct tickets instead of rows
+  const numTransacciones = new Set(ventas.map(v => v.ticket_numero).filter(Boolean)).size
   const ticketMedio = numTransacciones > 0 ? totalImporte / numTransacciones : 0
 
   // Top producto
