@@ -17,6 +17,7 @@ import Proveedores from '@/pages/compras/Proveedores'
 import ProductosCompra from '@/pages/compras/ProductosCompra'
 import Locales from '@/pages/compras/Locales'
 import Stock from '@/pages/compras/Stock'
+import Roles from '@/pages/Roles'
 
 function AppRoutes() {
   const { user } = useAuth()
@@ -58,6 +59,7 @@ function AppRoutes() {
         <Route path="/productos-compra" element={<ProtectedRoute screen="ProductosCompra"><ProductosCompra /></ProtectedRoute>} />
         <Route path="/locales" element={<ProtectedRoute screen="Locales"><Locales /></ProtectedRoute>} />
         <Route path="/stock" element={<ProtectedRoute screen="Stock"><Stock /></ProtectedRoute>} />
+            <Route path="/roles" element={<ProtectedRoute screen="Roles"><Roles /></ProtectedRoute>} />
       </Route>
 
       {/* Fallback */}
