@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils'
-import { BarChart3, RefreshCw } from 'lucide-react'
+import { BarChart3, RefreshCw, ChevronDown, X } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell,
@@ -62,11 +62,90 @@ function getPresets(): DatePreset[] {
   return [
     { label: 'Hoy', desde: todayStr(), hasta: todayStr() },
     { label: 'Ayer', desde: yesterdayStr(), hasta: yesterdayStr() },
-    { label: '7 dÃ­as', desde: daysAgo(7), hasta: yesterdayStr() },
-    { label: '30 dÃ­as', desde: daysAgo(30), hasta: yesterdayStr() },
+    { label: '7 d\u00edas', desde: daysAgo(7), hasta: yesterdayStr() },
+    { label: '30 d\u00edas', desde: daysAgo(30), hasta: yesterdayStr() },
     { label: 'Este mes', desde: firstOfMonth(), hasta: todayStr() },
     { label: 'Mes anterior', desde: pmDesde, hasta: pmHasta },
   ]
+}
+
+/* ââ MultiSelect component ââ */
+interface MultiSelectProps {
+  label: string
+  options: { value: string; label: string }[]
+  selected: string[]
+  onChange: (vals: string[]) => void
+  allLabel?: string
+}
+
+function MultiSelect({ label, options, selected, onChange, allLabel = 'Todos' }: MultiSelectProps) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const toggle = (val: string) => {
+    if (selected.includes(val)) onChange(selected.filter((v) => v !== val))
+    else onChange([...selected, val])
+  }
+
+  const displayText = selected.length === 0
+    ? allLabel
+    : selected.length <= 2
+      ? selected.map((v) => options.find((o) => o.value === v)?.label || v).join(', ')
+      : `${selected.length} seleccionados`
+
+  return (
+    <div className="flex items-center gap-2">
+      <label className="text-sm font-medium text-foreground whitespace-nowrap">{label}:</label>
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-1 border rounded-md px-3 py-2 text-sm bg-background text-foreground min-w-[160px] justify-between"
+        >
+          <span className="truncate">{displayText}</span>
+          <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+        {selected.length > 0 && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange([]) }}
+            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"
+          >
+            <X size={10} />
+          </button>
+        )}
+        {open && (
+          <div className="absolute z-50 mt-1 w-full min-w-[200px] max-h-60 overflow-y-auto bg-background border rounded-md shadow-lg">
+            {options.map((o) => (
+              <label
+                key={o.value}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted cursor-pointer text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(o.value)}
+                  onChange={() => toggle(o.value)}
+                  className="rounded"
+                />
+                {o.label}
+              </label>
+            ))}
+            {options.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Sin opciones</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /* ââ Component ââ */
@@ -77,8 +156,8 @@ export default function BI() {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [productosCat, setProductosCat] = useState<ProductoCat[]>([])
   const [selectedLocal, setSelectedLocal] = useState<string>('')
-  const [selectedCategoria, setSelectedCategoria] = useState<string>('')
-  const [selectedProducto, setSelectedProducto] = useState<string>('')
+  const [selectedCategorias, setSelectedCategorias] = useState<string[]>([])
+  const [selectedProductos, setSelectedProductos] = useState<string[]>([])
   const [ventas, setVentas] = useState<VentaRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -133,31 +212,51 @@ export default function BI() {
     setLoading(false)
   }
 
-  /* ââ Build productoâcategoria map ââ */
+  /* ââ Build productoâcategoria map (by ID and by name) ââ */
   const prodToCat = useMemo(() => {
-    const m = new Map<number, number>()
-    productosCat.forEach((p) => { if (p.categoria_id) m.set(p.id, p.categoria_id) })
-    return m
+    const byId = new Map<number, number>()
+    const byName = new Map<string, number>()
+    productosCat.forEach((p) => {
+      if (p.categoria_id) {
+        byId.set(p.id, p.categoria_id)
+        byName.set(p.nombre.toLowerCase(), p.categoria_id)
+      }
+    })
+    return { byId, byName }
   }, [productosCat])
 
-  /* ââ Products filtered by selected category ââ */
-  const productosEnCategoria = useMemo(() => {
-    if (!selectedCategoria) return productosCat
-    return productosCat.filter((p) => p.categoria_id === Number(selectedCategoria))
-  }, [productosCat, selectedCategoria])
+  /* helper: get catId for a venta row */
+  function getCatId(v: VentaRow): number | null {
+    if (v.producto_id) {
+      const c = prodToCat.byId.get(v.producto_id)
+      if (c) return c
+    }
+    return prodToCat.byName.get(v.producto.toLowerCase()) || null
+  }
+
+  /* ââ Products filtered by selected categories ââ */
+  const productosEnCategorias = useMemo(() => {
+    if (selectedCategorias.length === 0) return productosCat
+    const catIds = new Set(selectedCategorias.map(Number))
+    return productosCat.filter((p) => p.categoria_id && catIds.has(p.categoria_id))
+  }, [productosCat, selectedCategorias])
 
   /* ââ Filtered ventas (client-side category + product filter) ââ */
   const filteredVentas = useMemo(() => {
     let rows = ventas
-    if (selectedCategoria) {
-      const catId = Number(selectedCategoria)
-      rows = rows.filter((v) => v.producto_id && prodToCat.get(v.producto_id) === catId)
+    if (selectedCategorias.length > 0) {
+      const catIds = new Set(selectedCategorias.map(Number))
+      rows = rows.filter((v) => {
+        const cid = getCatId(v)
+        return cid !== null && catIds.has(cid)
+      })
     }
-    if (selectedProducto) {
-      rows = rows.filter((v) => v.producto === selectedProducto)
+    if (selectedProductos.length > 0) {
+      const prodSet = new Set(selectedProductos.map((s) => s.toLowerCase()))
+      rows = rows.filter((v) => prodSet.has(v.producto.toLowerCase()))
     }
     return rows
-  }, [ventas, selectedCategoria, selectedProducto, prodToCat])
+  }, [ventas, selectedCategorias, selectedProductos, prodToCat])
 
   /* ââ Derived data ââ */
   const totalImporte = filteredVentas.reduce((s, v) => s + (v.importe_total || 0), 0)
@@ -169,7 +268,7 @@ export default function BI() {
   filteredVentas.forEach((v) => {
     productoMap.set(v.producto, (productoMap.get(v.producto) || 0) + v.importe_total)
   })
-  const topProducto = [...productoMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 'â'
+  const topProducto = [...productoMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '\u2014'
 
   const dailyMap = new Map<string, number>()
   filteredVentas.forEach((v) => {
@@ -209,6 +308,10 @@ export default function BI() {
     setFechaHasta(p.hasta)
   }
 
+  /* ââ Options for multi-selects ââ */
+  const catOptions = categorias.map((c) => ({ value: String(c.id), label: c.nombre }))
+  const prodOptions = productosEnCategorias.map((p) => ({ value: p.nombre, label: p.nombre }))
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* ââ Header ââ */}
@@ -218,7 +321,7 @@ export default function BI() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Business Intelligence</h1>
-          <p className="text-muted-foreground text-sm">AnÃ¡lisis de ventas</p>
+          <p className="text-muted-foreground text-sm">{`An\u00e1lisis de ventas`}</p>
         </div>
       </div>
 
@@ -259,22 +362,20 @@ export default function BI() {
             {locales.map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
           </select>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-foreground">CategorÃ­a:</label>
-          <select className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-            value={selectedCategoria} onChange={(e) => { setSelectedCategoria(e.target.value); setSelectedProducto('') }}>
-            <option value="">Todas</option>
-            {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-foreground">Producto:</label>
-          <select className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-            value={selectedProducto} onChange={(e) => setSelectedProducto(e.target.value)}>
-            <option value="">Todos</option>
-            {productosEnCategoria.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
-          </select>
-        </div>
+        <MultiSelect
+          label={`Categor\u00eda`}
+          options={catOptions}
+          selected={selectedCategorias}
+          onChange={(vals) => { setSelectedCategorias(vals); setSelectedProductos([]) }}
+          allLabel="Todas"
+        />
+        <MultiSelect
+          label="Producto"
+          options={prodOptions}
+          selected={selectedProductos}
+          onChange={setSelectedProductos}
+          allLabel="Todos"
+        />
       </div>
 
       {/* ââ Summary Cards ââ */}
@@ -289,7 +390,7 @@ export default function BI() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">NÂº transacciones</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{`N\u00ba transacciones`}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-foreground">{formatNumber(numTransacciones, 0)}</p>
@@ -316,7 +417,7 @@ export default function BI() {
       {loading && (
         <div className="flex items-center justify-center py-8">
           <RefreshCw size={20} className="animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">Cargando datosâ¦</span>
+          <span className="ml-2 text-sm text-muted-foreground">Cargando datos\u2026</span>
         </div>
       )}
 
@@ -329,7 +430,7 @@ export default function BI() {
           {/* ââ Chart 1: Ventas por dÃ­a ââ */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ventas por dÃ­a</CardTitle>
+              <CardTitle className="text-base">{`Ventas por d\u00eda`}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-72">
