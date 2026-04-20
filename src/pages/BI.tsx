@@ -1,24 +1,21 @@
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils'
-import { BarChart3, RefreshCw, Calendar, ChevronDown, ChevronRight } from 'lucide-react'
+import { BarChart3, RefreshCw } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell,
 } from 'recharts'
-
 
 interface Local {
   id: number
   nombre: string
 }
 
-
 interface VentaRow {
   id: number
   fecha: string
-  ticket_numero: string
   producto: string
   local: string
   local_id: number
@@ -27,24 +24,20 @@ interface VentaRow {
   importe_total: number
 }
 
-
 interface DailySales {
   fecha: string
   total: number
 }
-
 
 interface ProductoRanking {
   producto: string
   total: number
 }
 
-
 interface LocalSales {
   local: string
   total: number
 }
-
 
 interface ProductBreakdown {
   producto: string
@@ -53,29 +46,10 @@ interface ProductBreakdown {
   porcentaje: number
 }
 
-
-interface CategoriaRanking {
-  categoria: string
-  importe: number
-  cantidad: number
-  porcentaje: number
-  productos: ProductBreakdown[]
-}
-
-
 const COLORS = [
   '#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899',
   '#f59e0b', '#06b6d4', '#84cc16', '#ef4444', '#6366f1',
 ]
-
-
-/* ------------------------------------------------------------------ */
-/*  Date helpers                                                       */
-/* ------------------------------------------------------------------ */
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 
 function daysAgo(n: number): string {
   const d = new Date()
@@ -83,167 +57,57 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-
-function startOfMonth(): string {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
-}
-
-
-function startOfYear(): string {
-  const d = new Date()
-  return new Date(d.getFullYear(), 0, 1).toISOString().slice(0, 10)
-}
-
-
-type DatePreset = 'ayer' | '7dias' | '30dias' | 'este_mes' | 'este_ano' | 'personalizado'
-
-const DATE_PRESETS: { key: DatePreset; label: string }[] = [
-  { key: 'ayer', label: 'Ayer' },
-  { key: '7dias', label: 'Últimos 7 días' },
-  { key: '30dias', label: 'Últimos 30 días' },
-  { key: 'este_mes', label: 'Este mes' },
-  { key: 'este_ano', label: 'Este Año' },
-  { key: 'personalizado', label: 'Personalizado' },
-]
-
-function yesterdayStr(): string {
-  return daysAgo(1)
-}
-
-function getPresetDates(preset: DatePreset): { desde: string; hasta: string } {
-  const yesterday = yesterdayStr()
-  switch (preset) {
-    case 'ayer':
-      return { desde: yesterday, hasta: yesterday }
-    case '7dias':
-      return { desde: daysAgo(8), hasta: yesterday }
-    case '30dias':
-      return { desde: daysAgo(30), hasta: yesterday }
-    case 'este_mes':
-      return { desde: startOfMonth(), hasta: yesterday }
-    case 'este_ano':
-      return { desde: startOfYear(), hasta: yesterday }
-    case 'personalizado':
-      return { desde: daysAgo(30), hasta: yesterday }
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10)
   }
-}
 
-
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
 export default function BI() {
-  const [datePreset, setDatePreset] = useState<DatePreset>('30dias')
   const [fechaDesde, setFechaDesde] = useState(daysAgo(30))
-  const [fechaHasta, setFechaHasta] = useState(yesterdayStr())
+  const [fechaHasta, setFechaHasta] = useState(todayStr())
   const [locales, setLocales] = useState<Local[]>([])
   const [selectedLocal, setSelectedLocal] = useState<string>('')
   const [ventas, setVentas] = useState<VentaRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [categoriaMap, setCategoriaMap] = useState<Map<string, string>>(new Map())
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
 
-  /* ---------- Load locales + product categories ---------- */
+  // ── Load locales ──
   useEffect(() => {
-    async function load() {
-      const [localesRes, productosRes] = await Promise.all([
-        supabase.from('locales_v2').select('id, nombre').order('nombre'),
-        supabase.from('productos_v2').select('nombre, categoria'),
-      ])
-      if (localesRes.data) setLocales(localesRes.data)
-      if (productosRes.data) {
-        const map = new Map<string, string>()
-        productosRes.data.forEach((p: any) => {
-          if (p.nombre && p.categoria) map.set(p.nombre, p.categoria)
-        })
-        setCategoriaMap(map)
-      }
+    async function loadLocales() {
+      const { data, error } = await supabase
+        .from('locales_v2')
+        .select('id, nombre')
+        .order('nombre')
+      if (!error && data) setLocales(data)
     }
-    load()
+    loadLocales()
   }, [])
 
-  /* ---------- Handle preset change ---------- */
-  function handlePresetChange(preset: DatePreset) {
-    setDatePreset(preset)
-    if (preset !== 'personalizado') {
-      const { desde, hasta } = getPresetDates(preset)
-      setFechaDesde(desde)
-      setFechaHasta(hasta)
-    }
-  }
-
-  /* ---------- Handle custom date change ---------- */
-  function handleCustomDesde(val: string) {
-    setDatePreset('personalizado')
-    setFechaDesde(val)
-  }
-
-  function handleCustomHasta(val: string) {
-    setDatePreset('personalizado')
-    setFechaHasta(val)
-  }
-
-  /* ---------- Fetch ALL ventas with pagination ---------- */
-  const loadVentas = useCallback(async () => {
-    setLoading(true)
-    try {
-      const allRows: VentaRow[] = []
-      const pageSize = 1000
-      let offset = 0
-      let hasMore = true
-
-      while (hasMore) {
-        let query = supabase
-          .from('ventas_raw_v2')
-          .select('*')
-          .gte('fecha', fechaDesde)
-          .lte('fecha', fechaHasta)
-          .order('fecha')
-          .range(offset, offset + pageSize - 1)
-
-        if (selectedLocal) {
-          query = query.eq('local_id', Number(selectedLocal))
-        }
-
-        const { data, error } = await query
-        if (error || !data) {
-          hasMore = false
-        } else {
-          allRows.push(...data)
-          if (data.length < pageSize) {
-            hasMore = false
-          } else {
-            offset += pageSize
-          }
-        }
-      }
-
-      setVentas(allRows)
-    } finally {
-      setLoading(false)
-    }
-  }, [fechaDesde, fechaHasta, selectedLocal])
-
+  // ── Load ventas ──
   useEffect(() => {
     loadVentas()
-  }, [loadVentas])
+  }, [fechaDesde, fechaHasta, selectedLocal])
 
-  /* ---------- Toggle category expansion ---------- */
-  function toggleCat(cat: string) {
-    setExpandedCats(prev => {
-      const next = new Set(prev)
-      if (next.has(cat)) next.delete(cat)
-      else next.add(cat)
-      return next
-    })
+  async function loadVentas() {
+    setLoading(true)
+    let query = supabase
+      .from('ventas_raw_v2')
+      .select('*')
+      .gte('fecha', fechaDesde)
+      .lte('fecha', fechaHasta)
+      .order('fecha')
+
+    if (selectedLocal) {
+      query = query.eq('local_id', Number(selectedLocal))
+    }
+
+    const { data, error } = await query
+    if (!error && data) setVentas(data)
+    setLoading(false)
   }
 
-  /* ---------- Derived data ---------- */
+  // ── Derived data ──
   const totalImporte = ventas.reduce((s, v) => s + (v.importe_total || 0), 0)
-
-  // Count distinct tickets instead of rows
-  const numTransacciones = new Set(ventas.map(v => v.ticket_numero).filter(Boolean)).size
+  const ticketsUnicos = new Set(ventas.map((v: any) => v.ticket_numero)).size
+  const numTransacciones = ticketsUnicos
   const ticketMedio = numTransacciones > 0 ? totalImporte / numTransacciones : 0
 
   // Top producto
@@ -290,58 +154,9 @@ export default function BI() {
       porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
     }))
 
-  // ---- RANKING POR CATEGORÍA ----
-  const catImporteMap = new Map<string, number>()
-  const catCantidadMap = new Map<string, number>()
-  const catProductosMap = new Map<string, Map<string, { importe: number; cantidad: number }>>()
-
-  ventas.forEach((v) => {
-    const cat = categoriaMap.get(v.producto) || 'Sin categoría'
-    catImporteMap.set(cat, (catImporteMap.get(cat) || 0) + v.importe_total)
-    catCantidadMap.set(cat, (catCantidadMap.get(cat) || 0) + v.cantidad)
-
-    if (!catProductosMap.has(cat)) catProductosMap.set(cat, new Map())
-    const prodMap = catProductosMap.get(cat)!
-    const existing = prodMap.get(v.producto) || { importe: 0, cantidad: 0 }
-    prodMap.set(v.producto, {
-      importe: existing.importe + v.importe_total,
-      cantidad: existing.cantidad + v.cantidad,
-    })
-  })
-
-  const categoriaRanking: CategoriaRanking[] = [...catImporteMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([categoria, importe]) => {
-      const productos = catProductosMap.get(categoria)!
-      const prodList: ProductBreakdown[] = [...productos.entries()]
-        .sort((a, b) => b[1].importe - a[1].importe)
-        .map(([producto, data]) => ({
-          producto,
-          cantidad: data.cantidad,
-          importe: Math.round(data.importe * 100) / 100,
-          porcentaje: importe > 0 ? Math.round((data.importe / importe) * 10000) / 100 : 0,
-        }))
-
-      return {
-        categoria,
-        importe: Math.round(importe * 100) / 100,
-        cantidad: catCantidadMap.get(categoria) || 0,
-        porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
-        productos: prodList,
-      }
-    })
-
-  // Category chart data (for bar chart)
-  const catChartData = categoriaRanking.map(c => ({
-    categoria: c.categoria,
-    total: c.importe,
-  }))
-
-
-  /* ---------- Render ---------- */
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
           <BarChart3 size={20} className="text-white" />
@@ -352,301 +167,218 @@ export default function BI() {
         </div>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-4 pb-4 space-y-3">
-          {/* Date preset buttons */}
-          <div className="flex flex-wrap gap-2">
-            {DATE_PRESETS.map(p => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => handlePresetChange(p.key)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  datePreset === p.key
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {p.label}
-              </button>
+      {/* ── Filters ── */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-foreground">Desde:</label>
+          <input
+            type="date"
+            className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
+            value={fechaDesde}
+            onChange={(e) => setFechaDesde(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-foreground">Hasta:</label>
+          <input
+            type="date"
+            className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
+            value={fechaHasta}
+            onChange={(e) => setFechaHasta(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-foreground">Local:</label>
+          <select
+            className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
+            value={selectedLocal}
+            onChange={(e) => setSelectedLocal(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {locales.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.nombre}
+              </option>
             ))}
-          </div>
+          </select>
+        </div>
+      </div>
 
-          {/* Custom date range + local filter */}
-          <div className="flex flex-wrap items-end gap-4">
-            {datePreset === 'personalizado' && (
-              <>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Desde</label>
-                  <input
-                    type="date"
-                    className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-                    value={fechaDesde}
-                    onChange={(e) => handleCustomDesde(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Hasta</label>
-                  <input
-                    type="date"
-                    className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-                    value={fechaHasta}
-                    onChange={(e) => handleCustomHasta(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-            {datePreset !== 'personalizado' && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Calendar size={14} />
-                <span>{fechaDesde} — {fechaHasta}</span>
-              </div>
-            )}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Local</label>
-              <select
-                className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-                value={selectedLocal}
-                onChange={(e) => setSelectedLocal(e.target.value)}
-              >
-                <option value="">Todos los locales</option>
-                {locales.map(l => (
-                  <option key={l.id} value={l.id}>{l.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={loadVentas}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              Actualizar
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {loading ? (
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Cargando datos...
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total ventas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-green-600">{formatCurrency(totalImporte)}</p>
           </CardContent>
         </Card>
-      ) : ventas.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No hay datos de ventas para el periodo seleccionado.
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Nº transacciones</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-foreground">{formatNumber(numTransacciones, 0)}</p>
           </CardContent>
         </Card>
-      ) : (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Ticket medio</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Top producto</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-lg font-bold text-foreground truncate" title={topProducto}>{topProducto}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <RefreshCw size={20} className="animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">Cargando datos…</span>
+        </div>
+      )}
+
+      {!loading && ventas.length === 0 && (
+        <p className="text-center text-muted-foreground py-8">No hay datos en el rango seleccionado.</p>
+      )}
+
+      {!loading && ventas.length > 0 && (
         <>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Ventas totales</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-foreground">{formatCurrency(totalImporte)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Transacciones</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-foreground">{formatNumber(numTransacciones)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Ticket medio</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-foreground">{formatCurrency(ticketMedio)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Top producto</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-lg font-bold text-foreground truncate">{topProducto}</div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Daily Sales Chart */}
+          {/* ── Chart 1: Ventas por día ── */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Ventas diarias</CardTitle>
+              <CardTitle className="text-base">Ventas por día</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={dailySales}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fecha" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(val: number) => formatCurrency(val)} />
-                  <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dailySales}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="fecha"
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v: string) => v.slice(5)}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      formatter={(value: number) => [formatCurrency(value), 'Importe']}
+                      labelFormatter={(label: string) => formatDate(label)}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      stroke={COLORS[0]}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Ranking por Categoría */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Ranking por categoría</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={Math.max(200, catChartData.length * 40)}>
-                <BarChart data={catChartData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis type="category" dataKey="categoria" tick={{ fontSize: 11 }} width={140} />
-                  <Tooltip formatter={(val: number) => formatCurrency(val)} />
-                  <Bar dataKey="total" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Desglose por categoría con productos expandibles */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Ventas por categoría y producto</CardTitle>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Categoría / Producto</th>
-                    <th className="py-2 px-4 font-medium text-right">Cantidad</th>
-                    <th className="py-2 px-4 font-medium text-right">Importe</th>
-                    <th className="py-2 pl-4 font-medium text-right">% del total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {categoriaRanking.map((cat, ci) => (
-                    <Fragment key={cat.categoria}>
-                      <tr
-                        className="border-b bg-gray-50 cursor-pointer hover:bg-gray-100"
-                        onClick={() => toggleCat(cat.categoria)}
-                      >
-                        <td className="py-2.5 pr-4 font-semibold text-foreground">
-                          <div className="flex items-center gap-2">
-                            {expandedCats.has(cat.categoria) ? (
-                              <ChevronDown size={16} className="text-muted-foreground" />
-                            ) : (
-                              <ChevronRight size={16} className="text-muted-foreground" />
-                            )}
-                            <span
-                              className="inline-block w-3 h-3 rounded-full mr-1"
-                              style={{ backgroundColor: COLORS[ci % COLORS.length] }}
-                            />
-                            {cat.categoria}
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-4 text-right font-semibold">{formatNumber(cat.cantidad)}</td>
-                        <td className="py-2.5 px-4 text-right font-semibold">{formatCurrency(cat.importe)}</td>
-                        <td className="py-2.5 pl-4 text-right font-semibold text-muted-foreground">{cat.porcentaje}%</td>
-                      </tr>
-                      {expandedCats.has(cat.categoria) && cat.productos.map((p) => (
-                        <tr key={`${cat.categoria}-${p.producto}`} className="border-b">
-                          <td className="py-1.5 pr-4 pl-10 text-foreground">{p.producto}</td>
-                          <td className="py-1.5 px-4 text-right">{formatNumber(p.cantidad)}</td>
-                          <td className="py-1.5 px-4 text-right">{formatCurrency(p.importe)}</td>
-                          <td className="py-1.5 pl-4 text-right text-muted-foreground text-xs">{p.porcentaje}% de cat.</td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-
-          {/* Top Productos + Ventas por Local */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* ── Charts row: Bar + Pie ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Chart 2: Top 10 productos */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Top 10 productos</CardTitle>
+                <CardTitle className="text-base">Top 10 productos por importe</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={topProductos} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tick={{ fontSize: 12 }} />
-                    <YAxis type="category" dataKey="producto" tick={{ fontSize: 11 }} width={140} />
-                    <Tooltip formatter={(val: number) => formatCurrency(val)} />
-                    <Bar dataKey="total" fill="#f97316" />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topProductos} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} />
+                      <YAxis
+                        type="category"
+                        dataKey="producto"
+                        width={120}
+                        tick={{ fontSize: 10 }}
+                      />
+                      <Tooltip formatter={(value: number) => [formatCurrency(value), 'Importe']} />
+                      <Bar dataKey="total" radius={[0, 4, 4, 0]}>
+                        {topProductos.map((_, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
+
+            {/* Chart 3: Ventas por local */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Ventas por local</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={localSales}
-                      dataKey="total"
-                      nameKey="local"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      label={({ local, percent }) =>
-                        `${local} ${(percent * 100).toFixed(0)}%`
-                      }
-                    >
-                      {localSales.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(val: number) => formatCurrency(val)} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className="h-72 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={localSales}
+                        dataKey="total"
+                        nameKey="local"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ local, percent }: { local: string; percent: number }) =>
+                          `${local} ${(percent * 100).toFixed(0)}%`
+                        }
+                        labelLine
+                      >
+                        {localSales.map((_, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [formatCurrency(value), 'Importe']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Product breakdown table */}
+          {/* ── Product breakdown table ── */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Desglose por producto</CardTitle>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Producto</th>
-                    <th className="py-2 px-4 font-medium text-right">Cantidad</th>
-                    <th className="py-2 px-4 font-medium text-right">Importe</th>
-                    <th className="py-2 pl-4 font-medium text-right">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productBreakdown.slice(0, 20).map((p) => (
-                    <tr key={p.producto} className="border-b">
-                      <td className="py-2 pr-4 font-medium text-foreground">{p.producto}</td>
-                      <td className="py-2 px-4 text-right">{formatNumber(p.cantidad)}</td>
-                      <td className="py-2 px-4 text-right">{formatCurrency(p.importe)}</td>
-                      <td className="py-2 pl-4 text-right text-muted-foreground">{p.porcentaje}%</td>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4">Producto</th>
+                      <th className="py-2 pr-4 text-right">Cantidad total</th>
+                      <th className="py-2 pr-4 text-right">Importe total</th>
+                      <th className="py-2 text-right">% del total</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {productBreakdown.length > 20 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Mostrando 20 de {productBreakdown.length} productos
-                </p>
-              )}
+                  </thead>
+                  <tbody>
+                    {productBreakdown.map((row) => (
+                      <tr key={row.producto} className="border-b last:border-0 hover:bg-muted/50">
+                        <td className="py-2 pr-4 font-medium">{row.producto}</td>
+                        <td className="py-2 pr-4 text-right">{formatNumber(row.cantidad, 0)}</td>
+                        <td className="py-2 pr-4 text-right">{formatCurrency(row.importe)}</td>
+                        <td className="py-2 text-right">{formatNumber(row.porcentaje)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         </>
@@ -654,3 +386,4 @@ export default function BI() {
     </div>
   )
 }
+
