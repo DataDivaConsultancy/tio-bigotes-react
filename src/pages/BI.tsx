@@ -59,7 +59,7 @@ function daysAgo(n: number): string {
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10)
-  }
+}
 
 export default function BI() {
   const [fechaDesde, setFechaDesde] = useState(daysAgo(30))
@@ -94,6 +94,7 @@ export default function BI() {
       .gte('fecha', fechaDesde)
       .lte('fecha', fechaHasta)
       .order('fecha')
+      .limit(50000)
 
     if (selectedLocal) {
       query = query.eq('local_id', Number(selectedLocal))
@@ -386,4 +387,3 @@ export default function BI() {
     </div>
   )
 }
-
