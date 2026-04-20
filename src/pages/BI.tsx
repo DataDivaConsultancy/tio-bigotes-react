@@ -66,6 +66,7 @@ function getPresets(): DatePreset[] {
     { label: '30 d\u00edas', desde: daysAgo(30), hasta: yesterdayStr() },
     { label: 'Este mes', desde: firstOfMonth(), hasta: todayStr() },
     { label: 'Mes anterior', desde: pmDesde, hasta: pmHasta },
+    { label: 'Este a\u00f1o', desde: `${new Date().getFullYear()}-01-01`, hasta: todayStr() },
   ]
 }
 
@@ -89,6 +90,13 @@ function MultiSelect({ label, options, selected, onChange, allLabel = 'Todos' }:
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  const allSelected = options.length > 0 && selected.length === options.length
+
+  const toggleAll = () => {
+    if (allSelected) onChange([])
+    else onChange(options.map((o) => o.value))
+  }
 
   const toggle = (val: string) => {
     if (selected.includes(val)) onChange(selected.filter((v) => v !== val))
@@ -124,6 +132,17 @@ function MultiSelect({ label, options, selected, onChange, allLabel = 'Todos' }:
         )}
         {open && (
           <div className="absolute z-50 mt-1 w-full min-w-[200px] max-h-60 overflow-y-auto bg-background border rounded-md shadow-lg">
+            {options.length > 0 && (
+              <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted cursor-pointer text-sm font-medium border-b">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="rounded"
+                />
+                Seleccionar todo
+              </label>
+            )}
             {options.map((o) => (
               <label
                 key={o.value}
