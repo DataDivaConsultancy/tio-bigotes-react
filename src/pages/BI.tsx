@@ -14,14 +14,14 @@ interface Local {
 }
 
 interface VentaRow {
-  id: number
   fecha: string
-  producto: string
-  local: string
+  local_nombre: string
   local_id: number
+  ticket_numero: string
+  producto: string
   cantidad: number
-  precio_unitario: number
   importe_total: number
+  precio_unitario: number
 }
 
 interface DailySales {
@@ -59,7 +59,7 @@ function daysAgo(n: number): string {
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10)
-}
+    }
 
 export default function BI() {
   const [fechaDesde, setFechaDesde] = useState(daysAgo(30))
@@ -88,20 +88,16 @@ export default function BI() {
 
   async function loadVentas() {
     setLoading(true)
-    let query = supabase
-      .from('ventas_raw_v2')
-      .select('*')
-      .gte('fecha', fechaDesde)
-      .lte('fecha', fechaHasta)
-      .order('fecha')
-      .limit(50000)
-
+    const params: Record<string, unknown> = {
+      p_fecha_desde: fechaDesde,
+      p_fecha_hasta: fechaHasta,
+    }
     if (selectedLocal) {
-      query = query.eq('local_id', Number(selectedLocal))
+      params.p_local_id = Number(selectedLocal)
     }
 
-    const { data, error } = await query
-    if (!error && data) setVentas(data)
+    const { data, error } = await supabase.rpc('bi_ventas_resumen', params)
+    if (!error && data) setVentas(data as VentaRow[])
     setLoading(false)
   }
 
@@ -136,7 +132,7 @@ export default function BI() {
   // Chart 3: ventas por local
   const localMap = new Map<string, number>()
   ventas.forEach((v) => {
-    localMap.set(v.local, (localMap.get(v.local) || 0) + v.importe_total)
+    localMap.set(v.local_nombre, (localMap.get(v.local_nombre) || 0) + v.importe_total)
   })
   const localSales: LocalSales[] = [...localMap.entries()]
     .map(([local, total]) => ({ local, total: Math.round(total * 100) / 100 }))
