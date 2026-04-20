@@ -21,7 +21,7 @@ interface Proveedor {
   activo: boolean
 }
 
-const FORMA_PAGO_OPTIONS = ['SEPA', 'Transferencia', 'T. Credito', 'Efectivo']
+const FORMA_PAGO_OPTIONS = ['SEPA', 'Transferencia', 'T. Credito', 'Efectivo', 'Otro']
 
 export default function Proveedores() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
@@ -187,7 +187,7 @@ export default function Proveedores() {
                 <Input value={form.nombre_comercial || ''} onChange={(e) => setForm({ ...form, nombre_comercial: e.target.value })} />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Razón social</label>
+                <label className="text-xs font-medium text-muted-foreground">RazÃ³n social</label>
                 <Input value={form.razon_social || ''} onChange={(e) => setForm({ ...form, razon_social: e.target.value })} />
               </div>
               <div>
@@ -203,7 +203,7 @@ export default function Proveedores() {
                 <Input value={form.persona_contacto || ''} onChange={(e) => setForm({ ...form, persona_contacto: e.target.value })} />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Teléfono contacto</label>
+                <label className="text-xs font-medium text-muted-foreground">TelÃ©fono contacto</label>
                 <Input value={form.telefono_contacto || ''} onChange={(e) => setForm({ ...form, telefono_contacto: e.target.value })} />
               </div>
               <div>
@@ -221,13 +221,13 @@ export default function Proveedores() {
                   value={form.forma_pago || ''}
                   onChange={(e) => setForm({ ...form, forma_pago: e.target.value || undefined })}
                 >
-                  <option value="">— Sin especificar —</option>
+                  <option value="">â Sin especificar â</option>
                   {FORMA_PAGO_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Plazo de pago</label>
-                <Input value={form.plazo_pago || ''} onChange={(e) => setForm({ ...form, plazo_pago: e.target.value })} placeholder="Ej: 30 días" />
+                <Input value={form.plazo_pago || ''} onChange={(e) => setForm({ ...form, plazo_pago: e.target.value })} placeholder="Ej: 30 dÃ­as" />
               </div>
               <div className="md:col-span-2">
                 <label className="text-xs font-medium text-muted-foreground">Notas</label>
@@ -275,7 +275,7 @@ export default function Proveedores() {
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">CIF</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Contacto</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Teléfono</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">TelÃ©fono</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Pago</th>
                   <th className="text-right py-3 px-4 font-medium text-muted-foreground w-20"></th>
                 </tr>
@@ -290,9 +290,9 @@ export default function Proveedores() {
                       <div className="font-medium">{p.nombre_comercial}</div>
                       {p.razon_social && <div className="text-xs text-muted-foreground">{p.razon_social}</div>}
                     </td>
-                    <td className="py-3 px-4 hidden md:table-cell text-muted-foreground">{p.cif || '—'}</td>
-                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">{p.persona_contacto || '—'}</td>
-                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">{p.telefono_contacto || '—'}</td>
+                    <td className="py-3 px-4 hidden md:table-cell text-muted-foreground">{p.cif || 'â'}</td>
+                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">{p.persona_contacto || 'â'}</td>
+                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">{p.telefono_contacto || 'â'}</td>
                     <td className="py-3 px-4 hidden md:table-cell">
                       {p.forma_pago && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
