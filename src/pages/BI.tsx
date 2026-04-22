@@ -2,13 +2,13 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils'
-import { BarChart3, RefreshCw, ChevronDown, X } from 'lucide-react'
+import { BarChart3, RefreshCw, ChevronDown, X, TrendingUp, TrendingDown } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell,
+  BarChart, Bar, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 
-/* ââ Types ââ */
+/* \u2500\u2500 Types \u2500\u2500 */
 interface Local { id: number; nombre: string }
 interface Categoria { id: number; nombre: string }
 interface ProductoCat { id: number; nombre: string; categoria_id: number | null }
@@ -25,7 +25,7 @@ interface VentaRow {
   precio_unitario: number
 }
 
-interface DailySales { fecha: string; total: number }
+interface DailySales { fecha: string; total: number; prevYear?: number }
 interface ProductoRanking { producto: string; total: number }
 interface LocalSales { local: string; total: number }
 interface ProductBreakdown {
@@ -37,7 +37,7 @@ const COLORS = [
   '#f59e0b', '#06b6d4', '#84cc16', '#ef4444', '#6366f1',
 ]
 
-/* ââ Date helpers ââ */
+/* \u2500\u2500 Date helpers \u2500\u2500 */
 function daysAgo(n: number): string {
   const d = new Date(); d.setDate(d.getDate() - n)
   return d.toISOString().slice(0, 10)
@@ -56,6 +56,12 @@ function prevMonthRange(): [string, string] {
   return [desde, hasta]
 }
 
+function shiftYear(dateStr: string, years: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setFullYear(d.getFullYear() + years)
+  return d.toISOString().slice(0, 10)
+}
+
 type DatePreset = { label: string; desde: string; hasta: string }
 function getPresets(): DatePreset[] {
   const [pmDesde, pmHasta] = prevMonthRange()
@@ -70,7 +76,23 @@ function getPresets(): DatePreset[] {
   ]
 }
 
-/* ââ MultiSelect component ââ */
+/* \u2500\u2500 YoY delta badge \u2500\u2500 */
+function DeltaBadge({ current, previous }: { current: number; previous: number }) {
+  if (previous === 0 && current === 0) return null
+  if (previous === 0) return <span className="text-xs text-green-600 font-medium">Nuevo</span>
+  const pct = ((current - previous) / previous) * 100
+  const isUp = pct > 0
+  const color = isUp ? 'text-green-600' : pct < 0 ? 'text-red-500' : 'text-muted-foreground'
+  const Icon = isUp ? TrendingUp : pct < 0 ? TrendingDown : null
+  return (
+    <span className={`flex items-center gap-1 text-xs font-medium ${color}`}>
+      {Icon && <Icon size={12} />}
+      {pct > 0 ? '+' : ''}{pct.toFixed(1)}% vs a\u00f1o ant.
+    </span>
+  )
+}
+
+/* \u2500\u2500 MultiSelect component \u2500\u2500 */
 interface MultiSelectProps {
   label: string
   options: { value: string; label: string }[]
@@ -167,7 +189,36 @@ function MultiSelect({ label, options, selected, onChange, allLabel = 'Todos' }:
   )
 }
 
-/* ââ Component ââ */
+/* \u2500\u2500 Paginated fetch helper \u2500\u2500 */
+async function fetchVentasPaginated(
+  desde: string, hasta: string, localId?: string
+): Promise<VentaRow[]> {
+  const PAGE = 1000
+  let allRows: VentaRow[] = []
+  let from = 0
+  let keepGoing = true
+  while (keepGoing) {
+    let query = supabase
+      .from('ventas_raw_v2')
+      .select('fecha, local_nombre:local, local_id, ticket_numero, producto, producto_id, cantidad, importe_total, precio_unitario')
+      .gte('fecha', desde)
+      .lte('fecha', hasta)
+      .order('fecha')
+      .range(from, from + PAGE - 1)
+    if (localId) query = query.eq('local_id', Number(localId))
+    const { data, error } = await query
+    if (error || !data || data.length === 0) {
+      keepGoing = false
+    } else {
+      allRows = allRows.concat(data as VentaRow[])
+      from += PAGE
+      if (data.length < PAGE) keepGoing = false
+    }
+  }
+  return allRows
+}
+
+/* \u2500\u2500 Component \u2500\u2500 */
 export default function BI() {
   const [fechaDesde, setFechaDesde] = useState(daysAgo(30))
   const [fechaHasta, setFechaHasta] = useState(yesterdayStr())
@@ -178,11 +229,12 @@ export default function BI() {
   const [selectedCategorias, setSelectedCategorias] = useState<string[]>([])
   const [selectedProductos, setSelectedProductos] = useState<string[]>([])
   const [ventas, setVentas] = useState<VentaRow[]>([])
+  const [ventasPrevYear, setVentasPrevYear] = useState<VentaRow[]>([])
   const [loading, setLoading] = useState(true)
 
   const presets = useMemo(() => getPresets(), [])
 
-  /* ââ Load reference data ââ */
+  /* \u2500\u2500 Load reference data \u2500\u2500 */
   useEffect(() => {
     async function load() {
       const [locRes, catRes, prodRes] = await Promise.all([
@@ -197,41 +249,23 @@ export default function BI() {
     load()
   }, [])
 
-  /* ââ Load ventas (paginated) ââ */
+  /* \u2500\u2500 Load ventas (current + prev year) \u2500\u2500 */
   useEffect(() => { loadVentas() }, [fechaDesde, fechaHasta, selectedLocal])
 
   async function loadVentas() {
     setLoading(true)
-    const PAGE = 1000
-    let allRows: VentaRow[] = []
-    let from = 0
-    let keepGoing = true
-
-    while (keepGoing) {
-      let query = supabase
-        .from('ventas_raw_v2')
-        .select('fecha, local_nombre:local, local_id, ticket_numero, producto, producto_id, cantidad, importe_total, precio_unitario')
-        .gte('fecha', fechaDesde)
-        .lte('fecha', fechaHasta)
-        .order('fecha')
-        .range(from, from + PAGE - 1)
-
-      if (selectedLocal) query = query.eq('local_id', Number(selectedLocal))
-
-      const { data, error } = await query
-      if (error || !data || data.length === 0) {
-        keepGoing = false
-      } else {
-        allRows = allRows.concat(data as VentaRow[])
-        from += PAGE
-        if (data.length < PAGE) keepGoing = false
-      }
-    }
-    setVentas(allRows)
+    const pyDesde = shiftYear(fechaDesde, -1)
+    const pyHasta = shiftYear(fechaHasta, -1)
+    const [current, prevYear] = await Promise.all([
+      fetchVentasPaginated(fechaDesde, fechaHasta, selectedLocal || undefined),
+      fetchVentasPaginated(pyDesde, pyHasta, selectedLocal || undefined),
+    ])
+    setVentas(current)
+    setVentasPrevYear(prevYear)
     setLoading(false)
   }
 
-  /* ââ Build productoâcategoria map (by ID and by name) ââ */
+  /* \u2500\u2500 Build producto\u2192categoria map (by ID and by name) \u2500\u2500 */
   const prodToCat = useMemo(() => {
     const byId = new Map<number, number>()
     const byName = new Map<string, number>()
@@ -244,7 +278,6 @@ export default function BI() {
     return { byId, byName }
   }, [productosCat])
 
-  /* helper: get catId for a venta row */
   function getCatId(v: VentaRow): number | null {
     if (v.producto_id) {
       const c = prodToCat.byId.get(v.producto_id)
@@ -253,35 +286,43 @@ export default function BI() {
     return prodToCat.byName.get(v.producto.toLowerCase()) || null
   }
 
-  /* ââ Products filtered by selected categories ââ */
+  /* \u2500\u2500 Products filtered by selected categories \u2500\u2500 */
   const productosEnCategorias = useMemo(() => {
     if (selectedCategorias.length === 0) return productosCat
     const catIds = new Set(selectedCategorias.map(Number))
     return productosCat.filter((p) => p.categoria_id && catIds.has(p.categoria_id))
   }, [productosCat, selectedCategorias])
 
-  /* ââ Filtered ventas (client-side category + product filter) ââ */
-  const filteredVentas = useMemo(() => {
-    let rows = ventas
+  /* \u2500\u2500 Filter helper \u2500\u2500 */
+  function applyFilters(rows: VentaRow[]): VentaRow[] {
+    let filtered = rows
     if (selectedCategorias.length > 0) {
       const catIds = new Set(selectedCategorias.map(Number))
-      rows = rows.filter((v) => {
+      filtered = filtered.filter((v) => {
         const cid = getCatId(v)
         return cid !== null && catIds.has(cid)
       })
     }
     if (selectedProductos.length > 0) {
       const prodSet = new Set(selectedProductos.map((s) => s.toLowerCase()))
-      rows = rows.filter((v) => prodSet.has(v.producto.toLowerCase()))
+      filtered = filtered.filter((v) => prodSet.has(v.producto.toLowerCase()))
     }
-    return rows
-  }, [ventas, selectedCategorias, selectedProductos, prodToCat])
+    return filtered
+  }
 
-  /* ââ Derived data ââ */
+  const filteredVentas = useMemo(() => applyFilters(ventas), [ventas, selectedCategorias, selectedProductos, prodToCat])
+  const filteredVentasPY = useMemo(() => applyFilters(ventasPrevYear), [ventasPrevYear, selectedCategorias, selectedProductos, prodToCat])
+
+  /* \u2500\u2500 Derived data (current) \u2500\u2500 */
   const totalImporte = filteredVentas.reduce((s, v) => s + (v.importe_total || 0), 0)
   const ticketsUnicos = new Set(filteredVentas.map((v) => v.ticket_numero)).size
   const numTransacciones = ticketsUnicos
   const ticketMedio = numTransacciones > 0 ? totalImporte / numTransacciones : 0
+
+  /* \u2500\u2500 Derived data (prev year) \u2500\u2500 */
+  const pyTotalImporte = filteredVentasPY.reduce((s, v) => s + (v.importe_total || 0), 0)
+  const pyTickets = new Set(filteredVentasPY.map((v) => v.ticket_numero)).size
+  const pyTicketMedio = pyTickets > 0 ? pyTotalImporte / pyTickets : 0
 
   const productoMap = new Map<string, number>()
   filteredVentas.forEach((v) => {
@@ -289,13 +330,55 @@ export default function BI() {
   })
   const topProducto = [...productoMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '\u2014'
 
+  /* \u2500\u2500 Daily sales (current + prev year aligned) \u2500\u2500 */
   const dailyMap = new Map<string, number>()
   filteredVentas.forEach((v) => {
     dailyMap.set(v.fecha, (dailyMap.get(v.fecha) || 0) + v.importe_total)
   })
-  const dailySales: DailySales[] = [...dailyMap.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([fecha, total]) => ({ fecha, total: Math.round(total * 100) / 100 }))
+
+  const pyDailyMap = new Map<string, number>()
+  filteredVentasPY.forEach((v) => {
+    pyDailyMap.set(v.fecha, (pyDailyMap.get(v.fecha) || 0) + v.importe_total)
+  })
+
+  // Build aligned chart data: map prev year dates to current year dates
+  const dailySales: DailySales[] = useMemo(() => {
+    const currentDates = [...dailyMap.keys()].sort()
+    const pyDates = [...pyDailyMap.keys()].sort()
+
+    // Build a map: pyDate -> currentDate (by day offset from start)
+    const pyDateToCurrentDate = new Map<string, string>()
+    if (currentDates.length > 0 && pyDates.length > 0) {
+      const startCurrent = new Date(currentDates[0] + 'T12:00:00')
+      const startPY = new Date(pyDates[0] + 'T12:00:00')
+      for (const pyDate of pyDates) {
+        const pyD = new Date(pyDate + 'T12:00:00')
+        const dayOffset = Math.round((pyD.getTime() - startPY.getTime()) / (1000 * 60 * 60 * 24))
+        const mapped = new Date(startCurrent)
+        mapped.setDate(mapped.getDate() + dayOffset)
+        pyDateToCurrentDate.set(pyDate, mapped.toISOString().slice(0, 10))
+      }
+    }
+
+    // Merge all dates
+    const allDates = new Set<string>(currentDates)
+    for (const [, mapped] of pyDateToCurrentDate) allDates.add(mapped)
+
+    const sortedAll = [...allDates].sort()
+    // Build reverse map: currentDate -> pyValue
+    const pyValueByCurrentDate = new Map<string, number>()
+    for (const [pyDate, currentDate] of pyDateToCurrentDate) {
+      pyValueByCurrentDate.set(currentDate, (pyValueByCurrentDate.get(currentDate) || 0) + (pyDailyMap.get(pyDate) || 0))
+    }
+
+    return sortedAll.map((fecha) => ({
+      fecha,
+      total: Math.round((dailyMap.get(fecha) || 0) * 100) / 100,
+      prevYear: pyValueByCurrentDate.has(fecha)
+        ? Math.round((pyValueByCurrentDate.get(fecha) || 0) * 100) / 100
+        : undefined,
+    }))
+  }, [filteredVentas, filteredVentasPY])
 
   const topProductos: ProductoRanking[] = [...productoMap.entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 10)
@@ -321,19 +404,19 @@ export default function BI() {
       porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
     }))
 
-  /* ââ Preset click handler ââ */
   function applyPreset(p: DatePreset) {
     setFechaDesde(p.desde)
     setFechaHasta(p.hasta)
   }
 
-  /* ââ Options for multi-selects ââ */
   const catOptions = categorias.map((c) => ({ value: String(c.id), label: c.nombre }))
   const prodOptions = productosEnCategorias.map((p) => ({ value: p.nombre, label: p.nombre }))
 
+  const hasPrevYearData = filteredVentasPY.length > 0
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* ââ Header ââ */}
+      {/* \u2500\u2500 Header \u2500\u2500 */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
           <BarChart3 size={20} className="text-white" />
@@ -344,7 +427,7 @@ export default function BI() {
         </div>
       </div>
 
-      {/* ââ Date presets ââ */}
+      {/* \u2500\u2500 Date presets \u2500\u2500 */}
       <div className="flex flex-wrap gap-2">
         {presets.map((p) => (
           <button
@@ -361,7 +444,7 @@ export default function BI() {
         ))}
       </div>
 
-      {/* ââ Filters ââ */}
+      {/* \u2500\u2500 Filters \u2500\u2500 */}
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-foreground">Desde:</label>
@@ -397,7 +480,7 @@ export default function BI() {
         />
       </div>
 
-      {/* ââ Summary Cards ââ */}
+      {/* \u2500\u2500 Summary Cards with YoY \u2500\u2500 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -405,6 +488,8 @@ export default function BI() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-green-600">{formatCurrency(totalImporte)}</p>
+            {hasPrevYearData && <DeltaBadge current={totalImporte} previous={pyTotalImporte} />}
+            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`A\u00f1o ant: ${formatCurrency(pyTotalImporte)}`}</p>}
           </CardContent>
         </Card>
         <Card>
@@ -413,6 +498,8 @@ export default function BI() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-foreground">{formatNumber(numTransacciones, 0)}</p>
+            {hasPrevYearData && <DeltaBadge current={numTransacciones} previous={pyTickets} />}
+            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`A\u00f1o ant: ${formatNumber(pyTickets, 0)}`}</p>}
           </CardContent>
         </Card>
         <Card>
@@ -421,6 +508,8 @@ export default function BI() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
+            {hasPrevYearData && <DeltaBadge current={ticketMedio} previous={pyTicketMedio} />}
+            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`A\u00f1o ant: ${formatCurrency(pyTicketMedio)}`}</p>}
           </CardContent>
         </Card>
         <Card>
@@ -446,7 +535,7 @@ export default function BI() {
 
       {!loading && filteredVentas.length > 0 && (
         <>
-          {/* ââ Chart 1: Ventas por dÃ­a ââ */}
+          {/* \u2500\u2500 Chart 1: Ventas por d\u00eda with YoY \u2500\u2500 */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{`Ventas por d\u00eda`}</CardTitle>
@@ -459,17 +548,26 @@ export default function BI() {
                     <XAxis dataKey="fecha" tick={{ fontSize: 11 }} tickFormatter={(v: string) => v.slice(5)} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip
-                      formatter={(value: number) => [formatCurrency(value), 'Importe']}
+                      formatter={(value: number, name: string) => {
+                        const label = name === 'total' ? 'Este periodo' : `A\u00f1o anterior`
+                        return [formatCurrency(value), label]
+                      }}
                       labelFormatter={(label: string) => formatDate(label)}
                     />
-                    <Line type="monotone" dataKey="total" stroke={COLORS[0]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                    {hasPrevYearData && (
+                      <Legend formatter={(value: string) => value === 'total' ? 'Este periodo' : `A\u00f1o anterior`} />
+                    )}
+                    <Line type="monotone" dataKey="total" stroke={COLORS[0]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="total" />
+                    {hasPrevYearData && (
+                      <Line type="monotone" dataKey="prevYear" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 3" dot={false} name="prevYear" connectNulls />
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          {/* ââ Charts row: Bar + Pie ââ */}
+          {/* \u2500\u2500 Charts row: Bar + Pie \u2500\u2500 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
@@ -525,7 +623,7 @@ export default function BI() {
             </Card>
           </div>
 
-          {/* ââ Product breakdown table ââ */}
+          {/* \u2500\u2500 Product breakdown table \u2500\u2500 */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Desglose por producto</CardTitle>
