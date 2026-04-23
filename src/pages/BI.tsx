@@ -56,10 +56,27 @@ function prevMonthRange(): [string, string] {
   return [desde, hasta]
 }
 
-function shiftYear(dateStr: string, years: number): string {
+/**
+ * Desplaza una fecha al mismo día de la semana del año anterior.
+ * Ej: martes 22 abr 2025 → martes 23 abr 2024 (no el 22 que era lunes).
+ * Busca la fecha del año anterior cuya ISO-week-offset coincida.
+ */
+function shiftToSameDayPrevYear(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
-  d.setFullYear(d.getFullYear() + years)
-  return d.toISOString().slice(0, 10)
+  const dow = d.getDay() // 0=dom..6=sab
+  // Retroceder ~52 semanas (364 días) mantiene el mismo día de la semana
+  const shifted = new Date(d)
+  shifted.setDate(shifted.getDate() - 364)
+  // Verificar que caímos en el mismo dow (por si acaso año bisiesto)
+  while (shifted.getDay() !== dow) {
+    shifted.setDate(shifted.getDate() - 1)
+  }
+  return shifted.toISOString().slice(0, 10)
+}
+
+/** Desplaza un rango completo al mismo día de la semana del año anterior */
+function shiftRangeToSameDayPrevYear(desde: string, hasta: string): [string, string] {
+  return [shiftToSameDayPrevYear(desde), shiftToSameDayPrevYear(hasta)]
 }
 
 type DatePreset = { label: string; desde: string; hasta: string }
@@ -68,11 +85,11 @@ function getPresets(): DatePreset[] {
   return [
     { label: 'Hoy', desde: todayStr(), hasta: todayStr() },
     { label: 'Ayer', desde: yesterdayStr(), hasta: yesterdayStr() },
-    { label: '7 d\u00edas', desde: daysAgo(7), hasta: yesterdayStr() },
-    { label: '30 d\u00edas', desde: daysAgo(30), hasta: yesterdayStr() },
+    { label: '7 días', desde: daysAgo(7), hasta: yesterdayStr() },
+    { label: '30 días', desde: daysAgo(30), hasta: yesterdayStr() },
     { label: 'Este mes', desde: firstOfMonth(), hasta: todayStr() },
     { label: 'Mes anterior', desde: pmDesde, hasta: pmHasta },
-    { label: 'Este a\u00f1o', desde: `${new Date().getFullYear()}-01-01`, hasta: todayStr() },
+    { label: 'Este año', desde: `${new Date().getFullYear()}-01-01`, hasta: todayStr() },
   ]
 }
 
@@ -87,7 +104,7 @@ function DeltaBadge({ current, previous }: { current: number; previous: number }
   return (
     <span className={`flex items-center gap-1 text-xs font-medium ${color}`}>
       {Icon && <Icon size={12} />}
-      {pct > 0 ? '+' : ''}{pct.toFixed(1)}% vs a\u00f1o ant.
+      {pct > 0 ? '+' : ''}{pct.toFixed(1)}% vs año ant.
     </span>
   )
 }
@@ -254,8 +271,7 @@ export default function BI() {
 
   async function loadVentas() {
     setLoading(true)
-    const pyDesde = shiftYear(fechaDesde, -1)
-    const pyHasta = shiftYear(fechaHasta, -1)
+    const [pyDesde, pyHasta] = shiftRangeToSameDayPrevYear(fechaDesde, fechaHasta)
     const [current, prevYear] = await Promise.all([
       fetchVentasPaginated(fechaDesde, fechaHasta, selectedLocal || undefined),
       fetchVentasPaginated(pyDesde, pyHasta, selectedLocal || undefined),
@@ -391,6 +407,30 @@ export default function BI() {
   const localSales: LocalSales[] = [...localMap.entries()]
     .map(([local, total]) => ({ local, total: Math.round(total * 100) / 100 }))
 
+  /* ── Ventas por categoría (current + prev year) ── */
+  const catSalesMap = new Map<string, { importe: number; cantidad: number }>()
+  filteredVentas.forEach((v) => {
+    const catId = getCatId(v)
+    const catName = catId ? (categorias.find(c => c.id === catId)?.nombre || `Cat ${catId}`) : 'Sin categoría'
+    const prev = catSalesMap.get(catName) || { importe: 0, cantidad: 0 }
+    catSalesMap.set(catName, { importe: prev.importe + v.importe_total, cantidad: prev.cantidad + v.cantidad })
+  })
+  const pyCatSalesMap = new Map<string, number>()
+  filteredVentasPY.forEach((v) => {
+    const catId = getCatId(v)
+    const catName = catId ? (categorias.find(c => c.id === catId)?.nombre || `Cat ${catId}`) : 'Sin categoría'
+    pyCatSalesMap.set(catName, (pyCatSalesMap.get(catName) || 0) + v.importe_total)
+  })
+  const categorySales = [...catSalesMap.entries()]
+    .sort((a, b) => b[1].importe - a[1].importe)
+    .map(([nombre, { importe, cantidad }]) => ({
+      nombre,
+      importe: Math.round(importe * 100) / 100,
+      cantidad,
+      porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
+      importePY: Math.round((pyCatSalesMap.get(nombre) || 0) * 100) / 100,
+    }))
+
   const cantidadMap = new Map<string, number>()
   filteredVentas.forEach((v) => {
     cantidadMap.set(v.producto, (cantidadMap.get(v.producto) || 0) + v.cantidad)
@@ -423,7 +463,7 @@ export default function BI() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Business Intelligence</h1>
-          <p className="text-muted-foreground text-sm">{`An\u00e1lisis de ventas`}</p>
+          <p className="text-muted-foreground text-sm">{'Análisis de ventas'}</p>
         </div>
       </div>
 
@@ -465,7 +505,7 @@ export default function BI() {
           </select>
         </div>
         <MultiSelect
-          label={`Categor\u00eda`}
+          label={'Categoría'}
           options={catOptions}
           selected={selectedCategorias}
           onChange={(vals) => { setSelectedCategorias(vals); setSelectedProductos([]) }}
@@ -489,17 +529,17 @@ export default function BI() {
           <CardContent>
             <p className="text-2xl font-bold text-green-600">{formatCurrency(totalImporte)}</p>
             {hasPrevYearData && <DeltaBadge current={totalImporte} previous={pyTotalImporte} />}
-            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`A\u00f1o ant: ${formatCurrency(pyTotalImporte)}`}</p>}
+            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`Año ant: ${formatCurrency(pyTotalImporte)}`}</p>}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{`N\u00ba transacciones`}</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">{'Nº transacciones'}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-foreground">{formatNumber(numTransacciones, 0)}</p>
             {hasPrevYearData && <DeltaBadge current={numTransacciones} previous={pyTickets} />}
-            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`A\u00f1o ant: ${formatNumber(pyTickets, 0)}`}</p>}
+            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`Año ant: ${formatNumber(pyTickets, 0)}`}</p>}
           </CardContent>
         </Card>
         <Card>
@@ -509,7 +549,7 @@ export default function BI() {
           <CardContent>
             <p className="text-2xl font-bold text-foreground">{formatCurrency(ticketMedio)}</p>
             {hasPrevYearData && <DeltaBadge current={ticketMedio} previous={pyTicketMedio} />}
-            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`A\u00f1o ant: ${formatCurrency(pyTicketMedio)}`}</p>}
+            {hasPrevYearData && <p className="text-xs text-muted-foreground mt-0.5">{`Año ant: ${formatCurrency(pyTicketMedio)}`}</p>}
           </CardContent>
         </Card>
         <Card>
@@ -535,10 +575,10 @@ export default function BI() {
 
       {!loading && filteredVentas.length > 0 && (
         <>
-          {/* \u2500\u2500 Chart 1: Ventas por d\u00eda with YoY \u2500\u2500 */}
+          {/* ── Chart 1: Ventas por día with YoY ── */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">{`Ventas por d\u00eda`}</CardTitle>
+              <CardTitle className="text-base">{'Ventas por día'}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-72">
@@ -549,13 +589,13 @@ export default function BI() {
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip
                       formatter={(value: number, name: string) => {
-                        const label = name === 'total' ? 'Este periodo' : `A\u00f1o anterior`
+                        const label = name === 'total' ? 'Este periodo' : `Año anterior`
                         return [formatCurrency(value), label]
                       }}
                       labelFormatter={(label: string) => formatDate(label)}
                     />
                     {hasPrevYearData && (
-                      <Legend formatter={(value: string) => value === 'total' ? 'Este periodo' : `A\u00f1o anterior`} />
+                      <Legend formatter={(value: string) => value === 'total' ? 'Este periodo' : `Año anterior`} />
                     )}
                     <Line type="monotone" dataKey="total" stroke={COLORS[0]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} name="total" />
                     {hasPrevYearData && (
@@ -623,7 +663,84 @@ export default function BI() {
             </Card>
           </div>
 
-          {/* \u2500\u2500 Product breakdown table \u2500\u2500 */}
+          {/* ── Ventas por categoría ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ventas por categoría</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4">Categoría</th>
+                      <th className="py-2 pr-4 text-right">Cantidad</th>
+                      <th className="py-2 pr-4 text-right">Importe</th>
+                      <th className="py-2 pr-4 text-right">% del total</th>
+                      {hasPrevYearData && <th className="py-2 pr-4 text-right">Año ant.</th>}
+                      {hasPrevYearData && <th className="py-2 text-right">vs Año ant.</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categorySales.map((row) => {
+                      const delta = row.importePY > 0 ? ((row.importe - row.importePY) / row.importePY) * 100 : null
+                      return (
+                        <tr key={row.nombre} className="border-b last:border-0 hover:bg-muted/50">
+                          <td className="py-2.5 pr-4 font-medium">{row.nombre}</td>
+                          <td className="py-2.5 pr-4 text-right">{formatNumber(row.cantidad, 0)}</td>
+                          <td className="py-2.5 pr-4 text-right font-medium">{formatCurrency(row.importe)}</td>
+                          <td className="py-2.5 pr-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-orange-400 rounded-full"
+                                  style={{ width: `${Math.min(100, row.porcentaje)}%` }}
+                                />
+                              </div>
+                              <span className="w-12 text-right">{formatNumber(row.porcentaje)}%</span>
+                            </div>
+                          </td>
+                          {hasPrevYearData && (
+                            <td className="py-2.5 pr-4 text-right text-muted-foreground">{formatCurrency(row.importePY)}</td>
+                          )}
+                          {hasPrevYearData && (
+                            <td className="py-2.5 text-right">
+                              {delta !== null ? (
+                                <span className={`inline-flex items-center gap-1 text-xs font-medium ${delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                  {delta >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                  {delta > 0 ? '+' : ''}{delta.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="text-xs text-green-600 font-medium">Nuevo</span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  {categorySales.length > 1 && (
+                    <tfoot>
+                      <tr className="border-t-2 font-bold">
+                        <td className="py-2.5 pr-4">TOTAL</td>
+                        <td className="py-2.5 pr-4 text-right">{formatNumber(categorySales.reduce((s, r) => s + r.cantidad, 0), 0)}</td>
+                        <td className="py-2.5 pr-4 text-right">{formatCurrency(totalImporte)}</td>
+                        <td className="py-2.5 pr-4 text-right">100%</td>
+                        {hasPrevYearData && <td className="py-2.5 pr-4 text-right">{formatCurrency(pyTotalImporte)}</td>}
+                        {hasPrevYearData && (
+                          <td className="py-2.5 text-right">
+                            {pyTotalImporte > 0 && <DeltaBadge current={totalImporte} previous={pyTotalImporte} />}
+                          </td>
+                        )}
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Product breakdown table ── */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Desglose por producto</CardTitle>
