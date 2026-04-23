@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils'
-import { BarChart3, RefreshCw, ChevronDown, X, TrendingUp, TrendingDown } from 'lucide-react'
+import { BarChart3, RefreshCw, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell, Legend,
@@ -107,6 +107,36 @@ function DeltaBadge({ current, previous }: { current: number; previous: number }
       {pct > 0 ? '+' : ''}{pct.toFixed(1)}% vs año ant.
     </span>
   )
+}
+
+/* ── Sort helpers ── */
+type SortDir = 'asc' | 'desc'
+interface SortConfig { field: string; dir: SortDir }
+
+function SortHeader({ label, field, sort, onSort, align = 'left' }: {
+  label: string; field: string; sort: SortConfig | null
+  onSort: (field: string) => void; align?: 'left' | 'right'
+}) {
+  const active = sort?.field === field
+  const Icon = active ? (sort.dir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown
+  return (
+    <th
+      className={`py-2 pr-4 cursor-pointer select-none hover:text-foreground transition-colors ${align === 'right' ? 'text-right' : 'text-left'}`}
+      onClick={() => onSort(field)}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
+        {label}
+        <Icon size={13} className={active ? 'text-blue-500' : 'text-muted-foreground/50'} />
+      </span>
+    </th>
+  )
+}
+
+function toggleSort(current: SortConfig | null, field: string): SortConfig {
+  if (current?.field === field) {
+    return { field, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+  }
+  return { field, dir: 'desc' }
 }
 
 /* \u2500\u2500 MultiSelect component \u2500\u2500 */
@@ -248,6 +278,8 @@ export default function BI() {
   const [ventas, setVentas] = useState<VentaRow[]>([])
   const [ventasPrevYear, setVentasPrevYear] = useState<VentaRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [catSort, setCatSort] = useState<SortConfig | null>(null)
+  const [prodSort, setProdSort] = useState<SortConfig | null>(null)
 
   const presets = useMemo(() => getPresets(), [])
 
@@ -421,8 +453,7 @@ export default function BI() {
     const catName = catId ? (categorias.find(c => c.id === catId)?.nombre || `Cat ${catId}`) : 'Sin categoría'
     pyCatSalesMap.set(catName, (pyCatSalesMap.get(catName) || 0) + v.importe_total)
   })
-  const categorySales = [...catSalesMap.entries()]
-    .sort((a, b) => b[1].importe - a[1].importe)
+  const categorySalesRaw = [...catSalesMap.entries()]
     .map(([nombre, { importe, cantidad }]) => ({
       nombre,
       importe: Math.round(importe * 100) / 100,
@@ -430,19 +461,40 @@ export default function BI() {
       porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
       importePY: Math.round((pyCatSalesMap.get(nombre) || 0) * 100) / 100,
     }))
+  const categorySales = useMemo(() => {
+    const arr = [...categorySalesRaw]
+    if (!catSort) return arr.sort((a, b) => b.importe - a.importe)
+    const dir = catSort.dir === 'asc' ? 1 : -1
+    return arr.sort((a, b) => {
+      const f = catSort.field as keyof typeof a
+      const va = f === 'nombre' ? (a[f] as string).toLowerCase() : (a[f] as number)
+      const vb = f === 'nombre' ? (b[f] as string).toLowerCase() : (b[f] as number)
+      return va < vb ? -dir : va > vb ? dir : 0
+    })
+  }, [categorySalesRaw, catSort])
 
   const cantidadMap = new Map<string, number>()
   filteredVentas.forEach((v) => {
     cantidadMap.set(v.producto, (cantidadMap.get(v.producto) || 0) + v.cantidad)
   })
-  const productBreakdown: ProductBreakdown[] = [...productoMap.entries()]
-    .sort((a, b) => b[1] - a[1])
+  const productBreakdownRaw: ProductBreakdown[] = [...productoMap.entries()]
     .map(([producto, importe]) => ({
       producto,
       cantidad: cantidadMap.get(producto) || 0,
       importe: Math.round(importe * 100) / 100,
       porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
     }))
+  const productBreakdown = useMemo(() => {
+    const arr = [...productBreakdownRaw]
+    if (!prodSort) return arr.sort((a, b) => b.importe - a.importe)
+    const dir = prodSort.dir === 'asc' ? 1 : -1
+    return arr.sort((a, b) => {
+      const f = prodSort.field as keyof ProductBreakdown
+      const va = f === 'producto' ? (a[f] as string).toLowerCase() : (a[f] as number)
+      const vb = f === 'producto' ? (b[f] as string).toLowerCase() : (b[f] as number)
+      return va < vb ? -dir : va > vb ? dir : 0
+    })
+  }, [productBreakdownRaw, prodSort])
 
   function applyPreset(p: DatePreset) {
     setFechaDesde(p.desde)
@@ -672,12 +724,12 @@ export default function BI() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="py-2 pr-4">Categoría</th>
-                      <th className="py-2 pr-4 text-right">Cantidad</th>
-                      <th className="py-2 pr-4 text-right">Importe</th>
-                      <th className="py-2 pr-4 text-right">% del total</th>
-                      {hasPrevYearData && <th className="py-2 pr-4 text-right">Año ant.</th>}
+                    <tr className="border-b text-muted-foreground">
+                      <SortHeader label="Categoría" field="nombre" sort={catSort} onSort={f => setCatSort(toggleSort(catSort, f))} />
+                      <SortHeader label="Cantidad" field="cantidad" sort={catSort} onSort={f => setCatSort(toggleSort(catSort, f))} align="right" />
+                      <SortHeader label="Importe" field="importe" sort={catSort} onSort={f => setCatSort(toggleSort(catSort, f))} align="right" />
+                      <SortHeader label="% del total" field="porcentaje" sort={catSort} onSort={f => setCatSort(toggleSort(catSort, f))} align="right" />
+                      {hasPrevYearData && <SortHeader label="Año ant." field="importePY" sort={catSort} onSort={f => setCatSort(toggleSort(catSort, f))} align="right" />}
                       {hasPrevYearData && <th className="py-2 text-right">vs Año ant.</th>}
                     </tr>
                   </thead>
@@ -749,11 +801,11 @@ export default function BI() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="py-2 pr-4">Producto</th>
-                      <th className="py-2 pr-4 text-right">Cantidad total</th>
-                      <th className="py-2 pr-4 text-right">Importe total</th>
-                      <th className="py-2 text-right">% del total</th>
+                    <tr className="border-b text-muted-foreground">
+                      <SortHeader label="Producto" field="producto" sort={prodSort} onSort={f => setProdSort(toggleSort(prodSort, f))} />
+                      <SortHeader label="Cantidad total" field="cantidad" sort={prodSort} onSort={f => setProdSort(toggleSort(prodSort, f))} align="right" />
+                      <SortHeader label="Importe total" field="importe" sort={prodSort} onSort={f => setProdSort(toggleSort(prodSort, f))} align="right" />
+                      <SortHeader label="% del total" field="porcentaje" sort={prodSort} onSort={f => setProdSort(toggleSort(prodSort, f))} align="right" />
                     </tr>
                   </thead>
                   <tbody>
