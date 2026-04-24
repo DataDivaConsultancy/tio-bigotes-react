@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils'
-import { BarChart3, RefreshCw, ChevronDown, X, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { BarChart3, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell, Legend,
@@ -501,6 +501,14 @@ export default function BI() {
     setFechaHasta(p.hasta)
   }
 
+  function shiftDay(offset: number) {
+    const d = new Date(fechaDesde + 'T12:00:00')
+    d.setDate(d.getDate() + offset)
+    const newDate = d.toISOString().slice(0, 10)
+    setFechaDesde(newDate)
+    setFechaHasta(newDate)
+  }
+
   const catOptions = categorias.map((c) => ({ value: String(c.id), label: c.nombre }))
   const prodOptions = productosEnCategorias.map((p) => ({ value: p.nombre, label: p.nombre }))
 
@@ -519,8 +527,34 @@ export default function BI() {
         </div>
       </div>
 
-      {/* \u2500\u2500 Date presets \u2500\u2500 */}
-      <div className="flex flex-wrap gap-2">
+      {/* ── Date presets + day navigator ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Day navigator: ‹ 23/04/2026 › */}
+        <div className="flex items-center gap-1 mr-2">
+          <button
+            type="button"
+            onClick={() => shiftDay(-1)}
+            className="text-lg text-muted-foreground hover:text-foreground transition-colors px-1"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={() => { setFechaDesde(fechaDesde); setFechaHasta(fechaDesde) }}
+            className="text-sm font-medium text-foreground min-w-[90px] text-center"
+          >
+            {new Date(fechaDesde + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          </button>
+          <button
+            type="button"
+            onClick={() => shiftDay(1)}
+            className="text-lg text-muted-foreground hover:text-foreground transition-colors px-1"
+          >
+            ›
+          </button>
+        </div>
+
+        {/* Presets */}
         {presets.map((p) => (
           <button
             key={p.label}
