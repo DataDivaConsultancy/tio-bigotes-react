@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase, rpcCall } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Search, Pencil, Check, X, ShoppingCart, Upload } from 'lucide-react'
-import Papa from 'papaparse'
+import { Search, Pencil, Check, X, ShoppingCart } from 'lucide-react'
 
 interface ProductoCompra {
   id: number
@@ -30,10 +29,7 @@ export default function ProductosCompra() {
   const [search, setSearch] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [editing, setEditing] = useState<ProductoCompra | null>(null)
-  const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState<Partial<ProductoCompra>>({})
 
@@ -72,58 +68,34 @@ export default function ProductosCompra() {
 
   const proveedorMap = new Map(proveedores.map((pv) => [pv.id, pv.nombre_comercial]))
 
-  function startCreate() {
-    setCreating(true)
-    setEditing(null)
-    setForm({ nombre: '', proveedor_id: undefined, precio_coste: undefined, unidad_compra: '', cantidad_minima: undefined, notas: '', activo: true })
-  }
-
   function startEdit(p: ProductoCompra) {
     setEditing(p)
-    setCreating(false)
     setForm({ ...p })
   }
 
   function cancelEdit() {
     setEditing(null)
-    setCreating(false)
     setForm({})
   }
 
   async function save() {
-    if (!form.nombre?.trim()) return
+    if (!editing || !form.nombre?.trim()) return
     setSaving(true)
 
-    if (creating) {
-      const result = await rpcCall('rpc_crear_producto_compra', {
-        p_nombre: form.nombre,
-        p_proveedor_id: form.proveedor_id || null,
-        p_precio_coste: form.precio_coste ?? null,
-        p_unidad_compra: form.unidad_compra || null,
-        p_cantidad_minima: form.cantidad_minima ?? null,
-        p_notas: form.notas || null,
-      })
-      if (!result.ok) {
-        alert(result.error || 'Error al crear producto')
-        setSaving(false)
-        return
-      }
-    } else if (editing) {
-      const result = await rpcCall('rpc_actualizar_producto_compra', {
-        p_id: editing.id,
-        p_nombre: form.nombre,
-        p_proveedor_id: form.proveedor_id || null,
-        p_precio_coste: form.precio_coste ?? null,
-        p_unidad_compra: form.unidad_compra || null,
-        p_cantidad_minima: form.cantidad_minima ?? null,
-        p_notas: form.notas || null,
-        p_activo: form.activo,
-      })
-      if (!result.ok) {
-        alert(result.error || 'Error al actualizar producto')
-        setSaving(false)
-        return
-      }
+    const result = await rpcCall('rpc_actualizar_producto_compra', {
+      p_id: editing.id,
+      p_nombre: form.nombre,
+      p_proveedor_id: form.proveedor_id || null,
+      p_precio_coste: form.precio_coste ?? null,
+      p_unidad_compra: form.unidad_compra || null,
+      p_cantidad_minima: form.cantidad_minima ?? null,
+      p_notas: form.notas || null,
+      p_activo: form.activo,
+    })
+    if (!result.ok) {
+      alert(result.error || 'Error al actualizar producto')
+      setSaving(false)
+      return
     }
 
     setSaving(false)
@@ -131,46 +103,7 @@ export default function ProductosCompra() {
     loadProductos()
   }
 
-  async function handleCSVImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImporting(true)
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        const rows = results.data as Record<string, unknown>[]
-        const parsed = rows.map((row) => ({
-          nombre: String(row.nombre || ''),
-          proveedor_id: row.proveedor_id ? Number(row.proveedor_id) : null,
-          precio_coste: row.precio_coste ? Number(row.precio_coste) : null,
-          unidad_compra: row.unidad_compra ? String(row.unidad_compra) : null,
-          cantidad_minima: row.cantidad_minima ? Number(row.cantidad_minima) : null,
-        }))
-
-        const result = await rpcCall('rpc_upsert_productos_compra_batch', {
-          p_rows: parsed,
-        })
-
-        if (!result.ok) {
-          alert(result.error || 'Error al importar CSV')
-        } else {
-          loadProductos()
-        }
-
-        setImporting(false)
-        if (fileInputRef.current) fileInputRef.current.value = ''
-      },
-      error: () => {
-        alert('Error al leer el archivo CSV')
-        setImporting(false)
-        if (fileInputRef.current) fileInputRef.current.value = ''
-      },
-    })
-  }
-
-  const isEditing = creating || editing !== null
+  const isEditing = editing !== null
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -184,22 +117,6 @@ export default function ProductosCompra() {
             <h1 className="text-xl font-bold">Productos de compra</h1>
             <p className="text-sm text-muted-foreground">{filtered.length} productos</p>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            onChange={handleCSVImport}
-            className="hidden"
-          />
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isEditing || importing}>
-            {importing ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" /> : <Upload size={16} />}
-            Importar CSV
-          </Button>
-          <Button onClick={startCreate} disabled={isEditing}>
-            <Plus size={16} /> Nuevo producto
-          </Button>
         </div>
       </div>
 
@@ -230,7 +147,7 @@ export default function ProductosCompra() {
         <Card className="border-primary/30 shadow-md">
           <CardHeader className="pb-4">
             <CardTitle className="text-base">
-              {creating ? 'Nuevo producto' : `Editando: ${editing?.nombre}`}
+              Editando: {editing?.nombre}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -305,7 +222,7 @@ export default function ProductosCompra() {
               </Button>
               <Button onClick={save} disabled={saving || !form.nombre?.trim()}>
                 {saving ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <Check size={14} />}
-                {creating ? 'Crear' : 'Guardar'}
+                Guardar
               </Button>
             </div>
           </CardContent>
