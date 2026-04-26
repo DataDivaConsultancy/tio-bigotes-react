@@ -87,7 +87,10 @@ export default function Operativa() {
         .from('categorias_producto_v2')
         .select('id, nombre')
         .order('nombre')
-      if (data) setCategorias(data)
+      if (data) {
+        setCategorias(data)
+        setSelectedCategorias(data.map(c => c.id))
+      }
     }
     load()
   }, [])
