@@ -43,8 +43,8 @@ function todayStr() {
   return d.toISOString().slice(0, 10)
 }
 
-function yesterdayStr() {
-  const d = new Date()
+function prevDayStr(dateStr: string) {
+  const d = new Date(dateStr + 'T12:00:00')
   d.setDate(d.getDate() - 1)
   return d.toISOString().slice(0, 10)
 }
@@ -62,7 +62,7 @@ export default function Operativa() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
-  const [fecha] = useState(todayStr())
+  const [fecha, setFecha] = useState(todayStr())
   const [catDropdownOpen, setCatDropdownOpen] = useState(false)
 
   /* ---------- Load locales ---------- */
@@ -160,7 +160,7 @@ export default function Operativa() {
         .from('control_diario_v2')
         .select('producto_id, resto')
         .eq('local_id', selectedLocal)
-        .eq('fecha', yesterdayStr())
+        .eq('fecha', prevDayStr(fecha))
         .in('producto_id', productos.map(p => p.id))
 
       const yesterdayMap: Record<number, number> = {}
@@ -329,7 +329,22 @@ export default function Operativa() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Control Diario</h1>
-            <p className="text-muted-foreground text-sm">{formatDate(new Date(), 'long')}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <input
+                type="date"
+                value={fecha}
+                onChange={e => setFecha(e.target.value || todayStr())}
+                className="border rounded-md px-2 py-1 text-sm bg-background"
+              />
+              {fecha !== todayStr() && (
+                <button
+                  onClick={() => setFecha(todayStr())}
+                  className="text-xs text-green-600 hover:underline"
+                >
+                  Hoy
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
