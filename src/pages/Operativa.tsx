@@ -89,7 +89,8 @@ export default function Operativa() {
         .order('nombre')
       if (data) {
         setCategorias(data)
-        setSelectedCategorias(data.map(c => c.id))
+        const defaultCats = ['Alfajor', 'Chipa', 'Empanada Clasica', 'Empanada Premium', 'Pizza']
+        setSelectedCategorias(data.filter(c => defaultCats.includes(c.nombre)).map(c => c.id))
       }
     }
     load()
