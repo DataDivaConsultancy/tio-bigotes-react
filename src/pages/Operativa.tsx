@@ -267,12 +267,10 @@ export default function Operativa() {
         return
       }
 
-      let savedCount = 0
-      let errorCount = 0
-
-      for (const row of dirtyRows) {
+      const payloads = dirtyRows.map(row => {
         const totalHorneadas = row.horneadas.reduce((s, h) => s + (h.cantidad || 0), 0)
-        const payload = {
+        return {
+          ...(row.id ? { id: row.id } : {}),
           local_id: selectedLocal,
           fecha,
           producto_id: row.producto_id,
@@ -281,30 +279,19 @@ export default function Operativa() {
           merma: row.merma,
           resto: row.resto,
         }
+      })
 
-        if (row.id) {
-          const { error } = await supabase
-            .from('control_diario_v2')
-            .update(payload)
-            .eq('id', row.id)
-          if (error) { errorCount++; console.error(error) }
-          else savedCount++
-        } else {
-          const { error } = await supabase
-            .from('control_diario_v2')
-            .insert(payload)
-          if (error) { errorCount++; console.error(error) }
-          else savedCount++
-        }
-      }
+      const { error, data } = await supabase
+        .from('control_diario_v2')
+        .upsert(payloads, { onConflict: 'local_id,fecha,producto_id' })
+        .select('id')
 
-      setRows(prev => prev.map(r => ({ ...r, dirty: false })))
-      await loadControlData()
-
-      if (errorCount > 0) {
-        setSavedMsg(`Guardado con ${errorCount} error(es). ${savedCount} filas guardadas.`)
+      if (error) {
+        console.error('Save error:', error)
+        setSavedMsg(`Error al guardar: ${error.message}`)
       } else {
-        setSavedMsg(`Guardado correctamente: ${savedCount} producto(s).`)
+        await loadControlData()
+        setSavedMsg(`Guardado correctamente: ${payloads.length} producto(s).`)
       }
     } finally {
       setSaving(false)
