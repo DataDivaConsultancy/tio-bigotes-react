@@ -1,10 +1,5 @@
 import { supabase } from '@/lib/supabase'
 
-// ============================================================
-// Data access — Maestros (locales, proveedores, catálogo)
-// Usado por las pantallas de Pedidos y Recepciones.
-// ============================================================
-
 export interface LocalMin {
   id: number
   nombre: string
@@ -32,9 +27,9 @@ export interface ItemCatalogo {
   unidad_uso: string
   factor_conversion: number
   unidades_por_paquete: number | null
-  precio: number
-  iva_pct: number
-  descuento_pct: number
+  precio: number | null
+  iva_pct: number | null
+  descuento_pct: number | null
   cantidad_minima_pedido: number | null
   multiplo_pedido: number | null
 }
@@ -67,9 +62,9 @@ export async function obtenerCatalogoProveedor(proveedorId: number): Promise<Ite
   if (error) throw new Error(error.message)
   return (data ?? []).map((r: any) => ({
     ...r,
-    precio: Number(r.precio),
-    iva_pct: Number(r.iva_pct),
-    descuento_pct: Number(r.descuento_pct),
+    precio: r.precio != null ? Number(r.precio) : null,
+    iva_pct: r.iva_pct != null ? Number(r.iva_pct) : null,
+    descuento_pct: r.descuento_pct != null ? Number(r.descuento_pct) : null,
     factor_conversion: Number(r.factor_conversion),
     cantidad_minima_pedido: r.cantidad_minima_pedido != null ? Number(r.cantidad_minima_pedido) : null,
     multiplo_pedido: r.multiplo_pedido != null ? Number(r.multiplo_pedido) : null,

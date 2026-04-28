@@ -21,6 +21,7 @@ export default function CrearPedido() {
   const [portes, setPortes] = useState(0)
   const [notas, setNotas] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  const [soloConPrecio, setSoloConPrecio] = useState(false)
   const [loadingMaestros, setLoadingMaestros] = useState(true)
   const [loadingCatalogo, setLoadingCatalogo] = useState(false)
   const [guardando, setGuardando] = useState(false)
@@ -71,24 +72,33 @@ export default function CrearPedido() {
   }
 
   const catalogoFiltrado = useMemo(() => {
+    let items = catalogo
+    if (soloConPrecio) items = items.filter((c) => c.precio != null)
     const q = busqueda.toLowerCase().trim()
-    if (!q) return catalogo
-    return catalogo.filter((c) =>
-      c.producto_nombre.toLowerCase().includes(q) ||
-      (c.cod_proveedor || '').toLowerCase().includes(q) ||
-      (c.cod_interno || '').toLowerCase().includes(q),
-    )
-  }, [catalogo, busqueda])
+    if (q) {
+      items = items.filter((c) =>
+        c.producto_nombre.toLowerCase().includes(q) ||
+        (c.cod_proveedor || '').toLowerCase().includes(q) ||
+        (c.cod_interno || '').toLowerCase().includes(q),
+      )
+    }
+    return items
+  }, [catalogo, busqueda, soloConPrecio])
 
-  const lineasActivas = useMemo(() => catalogo.filter((c) => (cantidades[c.formato_id] ?? 0) > 0), [catalogo, cantidades])
+  const lineasActivas = useMemo(
+    () => catalogo.filter((c) => (cantidades[c.formato_id] ?? 0) > 0 && c.precio != null),
+    [catalogo, cantidades],
+  )
   const totales = useMemo(() => {
     let subtotal = 0
     let ivaTotal = 0
     for (const c of lineasActivas) {
       const qty = cantidades[c.formato_id] ?? 0
-      const base = qty * c.precio * (1 - c.descuento_pct / 100)
+      const desc = c.descuento_pct ?? 0
+      const iva = c.iva_pct ?? 21
+      const base = qty * (c.precio ?? 0) * (1 - desc / 100)
       subtotal += base
-      ivaTotal += base * (c.iva_pct / 100)
+      ivaTotal += base * (iva / 100)
     }
     const total = subtotal + ivaTotal + (portes || 0)
     return {
@@ -97,6 +107,8 @@ export default function CrearPedido() {
       total: Math.round(total * 100) / 100,
     }
   }, [lineasActivas, cantidades, portes])
+
+  const sinPrecio = catalogo.length - catalogo.filter((c) => c.precio != null).length
 
   async function guardar() {
     setError(null)
@@ -112,9 +124,9 @@ export default function CrearPedido() {
         p_lineas: lineasActivas.map((c) => ({
           formato_id: c.formato_id,
           cantidad: cantidades[c.formato_id],
-          precio_unitario: c.precio,
-          descuento_pct: c.descuento_pct,
-          iva_pct: c.iva_pct,
+          precio_unitario: c.precio ?? 0,
+          descuento_pct: c.descuento_pct ?? 0,
+          iva_pct: c.iva_pct ?? 21,
         })),
         p_fecha_entrega_solicitada: fechaEntrega || null,
         p_portes: portes || 0,
@@ -190,7 +202,7 @@ export default function CrearPedido() {
       {proveedorId && (
         <Card>
           <CardContent className="p-0">
-            <div className="p-4 border-b flex items-center gap-3">
+            <div className="p-4 border-b flex items-center gap-3 flex-wrap">
               <div className="relative flex-1 max-w-md">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -200,7 +212,23 @@ export default function CrearPedido() {
                   className="pl-9"
                 />
               </div>
-              <span className="text-xs text-muted-foreground">{catalogoFiltrado.length} de {catalogo.length} productos</span>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={soloConPrecio}
+                  onChange={(e) => setSoloConPrecio(e.target.checked)}
+                  className="rounded"
+                />
+                Solo con precio
+              </label>
+              <span className="text-xs text-muted-foreground">
+                {catalogoFiltrado.length} de {catalogo.length} productos
+                {sinPrecio > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+                    {sinPrecio} sin precio
+                  </span>
+                )}
+              </span>
             </div>
 
             {loadingCatalogo ? (
@@ -227,42 +255,51 @@ export default function CrearPedido() {
                   <tbody>
                     {catalogoFiltrado.map((c) => {
                       const qty = cantidades[c.formato_id] ?? 0
-                      const base = qty * c.precio * (1 - c.descuento_pct / 100)
-                      const totalLinea = base * (1 + c.iva_pct / 100)
+                      const tienePrecio = c.precio != null
+                      const desc = c.descuento_pct ?? 0
+                      const iva = c.iva_pct ?? 21
+                      const base = qty * (c.precio ?? 0) * (1 - desc / 100)
+                      const totalLinea = base * (1 + iva / 100)
                       return (
-                        <tr key={c.formato_id} className={`border-b last:border-0 ${qty > 0 ? 'bg-blue-50/30' : ''}`}>
+                        <tr key={c.formato_id} className={`border-b last:border-0 ${qty > 0 ? 'bg-blue-50/30' : ''} ${!tienePrecio ? 'opacity-60' : ''}`}>
                           <td className="px-4 py-2">
                             <div className="font-medium">{c.producto_nombre}</div>
                             {c.cod_proveedor && <div className="text-xs text-muted-foreground">{c.cod_proveedor}</div>}
                           </td>
                           <td className="px-4 py-2 text-muted-foreground">{c.formato_compra}</td>
                           <td className="px-4 py-2 text-right tabular-nums">
-                            {c.precio.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })}
+                            {tienePrecio
+                              ? (c.precio as number).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
+                              : <span className="text-amber-600 text-xs font-medium">Sin precio</span>}
                           </td>
-                          <td className="px-4 py-2 text-center">{c.iva_pct}%</td>
+                          <td className="px-4 py-2 text-center">{tienePrecio ? `${iva}%` : '—'}</td>
                           <td className="px-4 py-2">
-                            <div className="flex items-center justify-center gap-1">
-                              <Button
-                                variant="outline" size="icon" type="button"
-                                onClick={() => ajustarCantidad(c.formato_id, -1, c.multiplo_pedido)}
-                                className="w-8 h-8"
-                              ><Minus size={14} /></Button>
-                              <Input
-                                type="number" min={0} step="any"
-                                value={qty || ''}
-                                onChange={(e) => setCantidad(c.formato_id, Number(e.target.value))}
-                                className="w-20 text-center"
-                                placeholder="0"
-                              />
-                              <Button
-                                variant="outline" size="icon" type="button"
-                                onClick={() => ajustarCantidad(c.formato_id, 1, c.multiplo_pedido)}
-                                className="w-8 h-8"
-                              ><Plus size={14} /></Button>
-                            </div>
+                            {tienePrecio ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="outline" size="icon" type="button"
+                                  onClick={() => ajustarCantidad(c.formato_id, -1, c.multiplo_pedido)}
+                                  className="w-8 h-8"
+                                ><Minus size={14} /></Button>
+                                <Input
+                                  type="number" min={0} step="any"
+                                  value={qty || ''}
+                                  onChange={(e) => setCantidad(c.formato_id, Number(e.target.value))}
+                                  className="w-20 text-center"
+                                  placeholder="0"
+                                />
+                                <Button
+                                  variant="outline" size="icon" type="button"
+                                  onClick={() => ajustarCantidad(c.formato_id, 1, c.multiplo_pedido)}
+                                  className="w-8 h-8"
+                                ><Plus size={14} /></Button>
+                              </div>
+                            ) : (
+                              <div className="text-center text-xs text-muted-foreground">Asigna precio en Productos Compra</div>
+                            )}
                           </td>
                           <td className="px-4 py-2 text-right tabular-nums">
-                            {qty > 0
+                            {qty > 0 && tienePrecio
                               ? totalLinea.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
                               : <span className="text-muted-foreground">—</span>}
                           </td>
