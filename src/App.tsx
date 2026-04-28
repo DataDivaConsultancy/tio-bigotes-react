@@ -12,6 +12,7 @@ import BI from '@/pages/BI'
 import Forecast from '@/pages/Forecast'
 import Pendientes from '@/pages/Pendientes'
 import CargaVentas from '@/pages/CargaVentas'
+import CargaProductos from '@/pages/CargaProductos'
 import Auditoria from '@/pages/Auditoria'
 import Proveedores from '@/pages/compras/Proveedores'
 import ProductosCompra from '@/pages/compras/ProductosCompra'
@@ -108,6 +109,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="CargaVentas">
               <CargaVentas />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/carga-productos"
+          element={
+            <ProtectedRoute screen="CargaProductos">
+              <CargaProductos />
             </ProtectedRoute>
           }
         />

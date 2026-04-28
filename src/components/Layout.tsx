@@ -5,7 +5,7 @@ import {
   Package, Users, ClipboardList, BarChart3, TrendingUp,
   AlertCircle, Upload, Shield, Factory, ShoppingCart,
   Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
-  LayoutDashboard, FileText, PackageCheck, AlertTriangle,
+  LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database,
 } from 'lucide-react'
 
 interface NavItem {
@@ -26,6 +26,7 @@ const navItems: NavItem[] = [
   { key: 'Forecast', label: 'Forecast', icon: TrendingUp, path: '/forecast' },
   { key: 'Pendientes', label: 'Pendientes', icon: AlertCircle, path: '/pendientes' },
   { key: 'CargaVentas', label: 'Subir CSV Ventas', icon: Upload, path: '/carga-ventas', section: 'Datos' },
+  { key: 'CargaProductos', label: 'Subir CSV Productos', icon: Database, path: '/carga-productos' },
   { key: 'Auditoria', label: 'Auditoría', icon: Shield, path: '/auditoria' },
   { key: 'ComprasDashboard', label: 'Dashboard Compras', icon: LayoutDashboard, path: '/compras', section: 'Compras' },
   { key: 'Proveedores', label: 'Proveedores', icon: Factory, path: '/proveedores' },
