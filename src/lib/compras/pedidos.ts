@@ -60,6 +60,16 @@ export async function actualizarPedido(params: {
 }
 
 export async function enviarPedido(p_id: string, p_via: 'email' | 'portal' | 'whatsapp' | 'telefono' | 'edi' = 'email') {
+  // Para email: usar la Edge Function que envía vía Resend y luego marca como enviado
+  if (p_via === 'email') {
+    const { data, error } = await supabase.functions.invoke('enviar-pedido-email', {
+      body: { pedido_id: p_id },
+    })
+    if (error) return { ok: false, error: error.message ?? 'Error invocando función' }
+    if (data && typeof data === 'object' && 'ok' in data) return data as any
+    return { ok: true, data }
+  }
+  // Otros canales: solo cambiar estado en BD
   return rpcCall('rpc_enviar_pedido', { p_id, p_via })
 }
 
