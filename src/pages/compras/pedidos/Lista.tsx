@@ -1,10 +1,6 @@
-import Placeholder from '@/pages/Placeholder'
-
-export default function ListaPedidos() {
-  return (
-    <Placeholder
-      title="Pedidos de Compra"
-      description="Lista de pedidos de compra con filtros por estado, proveedor, local y fechas. Próximamente."
-    />
-  )
-}
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Search, FileText, Filter, RefreshCw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, C
