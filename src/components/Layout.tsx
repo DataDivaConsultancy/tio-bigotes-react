@@ -4,7 +4,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   Package, Users, ClipboardList, BarChart3, TrendingUp,
   AlertCircle, Upload, Shield, Factory, ShoppingCart,
-  Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound } from 'lucide-react'
+  Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
+  LayoutDashboard, FileText, PackageCheck, AlertTriangle,
+} from 'lucide-react'
 
 interface NavItem {
   key: string
@@ -25,10 +27,14 @@ const navItems: NavItem[] = [
   { key: 'Pendientes', label: 'Pendientes', icon: AlertCircle, path: '/pendientes' },
   { key: 'CargaVentas', label: 'Subir CSV Ventas', icon: Upload, path: '/carga-ventas', section: 'Datos' },
   { key: 'Auditoria', label: 'Auditoría', icon: Shield, path: '/auditoria' },
-  { key: 'Proveedores', label: 'Proveedores', icon: Factory, path: '/proveedores', section: 'Compras' },
+  { key: 'ComprasDashboard', label: 'Dashboard Compras', icon: LayoutDashboard, path: '/compras', section: 'Compras' },
+  { key: 'Proveedores', label: 'Proveedores', icon: Factory, path: '/proveedores' },
   { key: 'ProductosCompra', label: 'Productos Compra', icon: ShoppingCart, path: '/productos-compra' },
   { key: 'Locales', label: 'Locales', icon: Store, path: '/locales' },
   { key: 'Stock', label: 'Gestión de Stock', icon: BoxesIcon, path: '/stock' },
+  { key: 'Pedidos', label: 'Pedidos', icon: FileText, path: '/compras/pedidos' },
+  { key: 'Recepciones', label: 'Recepciones', icon: PackageCheck, path: '/compras/recepciones' },
+  { key: 'Incidencias', label: 'Incidencias', icon: AlertTriangle, path: '/compras/incidencias' },
 ]
 
 export default function Layout() {

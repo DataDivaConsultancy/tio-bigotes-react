@@ -17,6 +17,19 @@ import Proveedores from '@/pages/compras/Proveedores'
 import ProductosCompra from '@/pages/compras/ProductosCompra'
 import Locales from '@/pages/compras/Locales'
 import Stock from '@/pages/compras/Stock'
+// Módulo de Compras v2 (MVP1)
+import ComprasDashboard from '@/pages/compras/Dashboard'
+import ListaPedidos from '@/pages/compras/pedidos/Lista'
+import CrearPedido from '@/pages/compras/pedidos/Crear'
+import DetallePedido from '@/pages/compras/pedidos/Detalle'
+import AprobacionesPedidos from '@/pages/compras/pedidos/Aprobaciones'
+import ListaRecepciones from '@/pages/compras/recepciones/Lista'
+import DetalleRecepcion from '@/pages/compras/recepciones/Detalle'
+import ListaIncidencias from '@/pages/compras/incidencias/Lista'
+import DetalleIncidencia from '@/pages/compras/incidencias/Detalle'
+// Fase 2 (placeholders)
+import ListaAlbaranes from '@/pages/compras/albaranes/Lista'
+import ListaFacturas from '@/pages/compras/facturas/Lista'
 
 function AppRoutes() {
   const { user } = useAuth()
@@ -137,6 +150,98 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="Stock">
               <Stock />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Módulo de Compras v2 — MVP1 */}
+        <Route
+          path="/compras"
+          element={
+            <ProtectedRoute screen="ComprasDashboard">
+              <ComprasDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/pedidos"
+          element={
+            <ProtectedRoute screen="Pedidos">
+              <ListaPedidos />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/pedidos/nuevo"
+          element={
+            <ProtectedRoute screen="Pedidos">
+              <CrearPedido />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/pedidos/aprobaciones"
+          element={
+            <ProtectedRoute screen="Pedidos">
+              <AprobacionesPedidos />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/pedidos/:id"
+          element={
+            <ProtectedRoute screen="Pedidos">
+              <DetallePedido />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/recepciones"
+          element={
+            <ProtectedRoute screen="Recepciones">
+              <ListaRecepciones />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/recepciones/:id"
+          element={
+            <ProtectedRoute screen="Recepciones">
+              <DetalleRecepcion />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/incidencias"
+          element={
+            <ProtectedRoute screen="Incidencias">
+              <ListaIncidencias />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/incidencias/:id"
+          element={
+            <ProtectedRoute screen="Incidencias">
+              <DetalleIncidencia />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Compras — Fase 2 (placeholders) */}
+        <Route
+          path="/compras/albaranes"
+          element={
+            <ProtectedRoute screen="Albaranes">
+              <ListaAlbaranes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/facturas"
+          element={
+            <ProtectedRoute screen="FacturasCompra">
+              <ListaFacturas />
             </ProtectedRoute>
           }
         />
