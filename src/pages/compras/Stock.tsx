@@ -9,13 +9,13 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface StockActual {
-  producto_id: number
+  producto_compra_id: number
   producto_nombre: string
   proveedor_nombre: string
   local_nombre: string
-  cantidad: number
-  unidad_compra: string
-  precio_coste: number
+  stock_actual: number
+  unidad_medida: string | null
+  precio: number | null
 }
 
 interface Producto {
@@ -147,7 +147,7 @@ export default function Stock() {
   const localNames = [...new Set(stockData.map((s) => s.local_nombre))].sort()
   const filteredStock = stockFilter === 'todos' ? stockData : stockData.filter((s) => s.local_nombre === stockFilter)
 
-  const totalCoste = filteredStock.reduce((sum, s) => sum + s.cantidad * s.precio_coste, 0)
+  const totalCoste = filteredStock.reduce((sum, s) => sum + Number(s.stock_actual ?? 0) * Number(s.precio ?? 0), 0)
 
   function renderStockActual() {
     return (
@@ -191,7 +191,7 @@ export default function Stock() {
                   </thead>
                   <tbody>
                     {filteredStock.map((s, i) => (
-                      <tr key={`${s.producto_id}-${s.local_nombre}-${i}`} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <tr key={`${s.producto_compra_id}-${s.local_nombre}-${i}`} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="py-3 px-4 font-medium">{s.producto_nombre}</td>
                         <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{s.proveedor_nombre}</td>
                         <td className="py-3 px-4">
@@ -199,10 +199,10 @@ export default function Stock() {
                             {s.local_nombre}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right font-mono">{s.cantidad}</td>
-                        <td className="py-3 px-4 text-muted-foreground hidden lg:table-cell">{s.unidad_compra}</td>
-                        <td className="py-3 px-4 text-right text-muted-foreground hidden md:table-cell">{formatCurrency(s.precio_coste)}</td>
-                        <td className="py-3 px-4 text-right font-mono hidden lg:table-cell">{formatCurrency(s.cantidad * s.precio_coste)}</td>
+                        <td className="py-3 px-4 text-right font-mono">{Number(s.stock_actual ?? 0).toLocaleString('es-ES')}</td>
+                        <td className="py-3 px-4 text-muted-foreground hidden lg:table-cell">{s.unidad_medida ?? '—'}</td>
+                        <td className="py-3 px-4 text-right text-muted-foreground hidden md:table-cell">{s.precio != null ? formatCurrency(Number(s.precio)) : '—'}</td>
+                        <td className="py-3 px-4 text-right font-mono hidden lg:table-cell">{s.precio != null ? formatCurrency(Number(s.stock_actual ?? 0) * Number(s.precio)) : '—'}</td>
                       </tr>
                     ))}
                     {filteredStock.length === 0 && (
