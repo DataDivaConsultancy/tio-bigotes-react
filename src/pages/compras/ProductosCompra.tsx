@@ -123,7 +123,7 @@ export default function ProductosCompra() {
       p_cod_proveedor: form.cod_proveedor ?? null,
       p_cod_interno: form.cod_interno ?? null,
       p_unidad_medida: form.unidad_medida ?? null,
-      p_unidad_minima_compra: form.unidad_minima_compra ?? null,
+      p_unidad_minima_compra: form.unidades_por_paquete ?? null,
       p_unidades_por_paquete: form.unidades_por_paquete ?? 1,
       p_dia_pedido: form.dia_pedido ?? null,
       p_dia_entrega: form.dia_entrega ?? null,
@@ -251,26 +251,18 @@ export default function ProductosCompra() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Cantidad mínima compra</label>
-                <Input
-                  type="number" step="any" min={0}
-                  value={form.unidad_minima_compra ?? ''}
-                  onChange={(e) => setForm({ ...form, unidad_minima_compra: e.target.value ? Number(e.target.value) : null })}
-                />
-              </div>
-              <div>
                 <label className="text-xs font-medium text-muted-foreground">
-                  Unidades por paquete
-                  <span className="ml-1 text-[10px] text-muted-foreground/70">(stock real al recibir)</span>
+                  Compra mínima
+                  <span className="ml-1 text-[10px] text-muted-foreground/70">(unidades por paquete)</span>
                 </label>
                 <Input
                   type="number" step="any" min={1}
                   value={form.unidades_por_paquete ?? ''}
-                  onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null })}
+                  onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null, unidad_minima_compra: e.target.value ? Number(e.target.value) : null })}
                   placeholder="1"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Ej: caja de 12 botellas → 12. Una empanada suelta → 1.
+                  Ej: caja de 60 empanadas → 60. Una empanada suelta → 1.
                 </p>
               </div>
               <div>
