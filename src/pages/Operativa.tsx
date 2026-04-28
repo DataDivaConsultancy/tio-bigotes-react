@@ -207,6 +207,32 @@ export default function Operativa() {
           dirty: stockInicial > 0,
         }
       })
+
+      // Load individual horneadas from the new table
+      const idsWithData = newRows.filter(r => r.id).map(r => r.id!)
+      if (idsWithData.length > 0) {
+        const { data: horneadasData } = await supabase
+          .from('control_diario_horneadas')
+          .select('control_diario_id, numero_horneada, cantidad')
+          .in('control_diario_id', idsWithData)
+          .order('numero_horneada')
+
+        if (horneadasData && horneadasData.length > 0) {
+          // Group by control_diario_id
+          const horneadasMap: Record<number, { cantidad: number }[]> = {}
+          horneadasData.forEach(h => {
+            if (!horneadasMap[h.control_diario_id]) horneadasMap[h.control_diario_id] = []
+            horneadasMap[h.control_diario_id].push({ cantidad: Number(h.cantidad) || 0 })
+          })
+          // Apply to rows
+          newRows.forEach(r => {
+            if (r.id && horneadasMap[r.id]) {
+              r.horneadas = horneadasMap[r.id]
+            }
+          })
+        }
+      }
+
       setRows(newRows)
     } finally {
       setLoading(false)
@@ -294,6 +320,34 @@ export default function Operativa() {
         console.error('Save error:', error)
         setSavedMsg(`Error al guardar: ${error.message}`)
       } else {
+        // Save individual horneadas to the new table
+        // We need the IDs of the saved rows - reload to get them
+        const { data: savedRows } = await supabase
+          .from('control_diario_v2')
+          .select('id, producto_id')
+          .eq('local_id', selectedLocal)
+          .eq('fecha', fecha)
+          .in('producto_id', dirtyRows.map(r => r.producto_id))
+
+        if (savedRows) {
+          const savedMap: Record<number, number> = {}
+          savedRows.forEach(r => { savedMap[r.producto_id] = r.id })
+
+          for (const row of dirtyRows) {
+            const cdId = savedMap[row.producto_id]
+            if (cdId && row.horneadas.length > 0) {
+              const horneadasJson = row.horneadas.map((h, idx) => ({
+                numero: idx + 1,
+                cantidad: h.cantidad || 0
+              }))
+              await supabase.rpc('rpc_guardar_horneadas', {
+                p_control_diario_id: cdId,
+                p_horneadas: horneadasJson
+              })
+            }
+          }
+        }
+
         await loadControlData()
         setSavedMsg(`Guardado correctamente: ${payloads.length} producto(s).`)
       }
