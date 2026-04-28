@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, FileText, Send, X as IconX, Copy, Check, RotateCcw, Clock,
-  RefreshCw, AlertCircle, Calendar, Truck, CheckCircle2, XCircle, MapPin, User
+  RefreshCw, AlertCircle, Calendar, Truck, CheckCircle2, XCircle, MapPin, User,
+  PackageCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +11,7 @@ import EstadoBadge from '@/components/compras/EstadoBadge'
 import {
   obtenerPedido, enviarPedido, aprobarPedido, cancelarPedido, duplicarPedido,
 } from '@/lib/compras/pedidos'
+import { iniciarRecepcion } from '@/lib/compras/recepciones'
 import type { EstadoPedido } from '@/lib/schemas/pedidos'
 import { useRealtimePedidos } from '@/hooks/compras/useRealtimePedidos'
 
@@ -191,6 +193,16 @@ export default function DetallePedido() {
     else navigate('/compras/pedidos')
   }
 
+  async function accionRecepcionar() {
+    if (!cabecera) return
+    setActuando(true); setError(null); setMensaje(null)
+    const r = await iniciarRecepcion(cabecera.id)
+    setActuando(false)
+    if (!r.ok) { setError(r.error || 'Error iniciando recepción'); return }
+    const data = (r as any).data ?? r
+    if (data?.id) navigate(`/compras/recepciones/${data.id}`)
+  }
+
   if (loading && !cabecera) {
     return <div className="p-8 text-center text-muted-foreground">Cargando pedido…</div>
   }
@@ -214,6 +226,7 @@ export default function DetallePedido() {
   const puedeAprobar      = e === 'pendiente_aprobacion'
   const puedeCancelar     = !['cancelado','cerrado','recibido'].includes(e) && !cabecera.confirmado_at
   const puedeDuplicar     = true
+  const puedeRecepcionar  = ['enviado','confirmado','parcialmente_recibido'].includes(e)
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
@@ -282,12 +295,17 @@ export default function DetallePedido() {
               <IconX size={14} /> Cancelar
             </Button>
           )}
+          {puedeRecepcionar && (
+            <Button size="sm" onClick={accionRecepcionar} disabled={actuando} className="bg-emerald-600 hover:bg-emerald-700">
+              <PackageCheck size={14} /> Recepcionar
+            </Button>
+          )}
           {puedeDuplicar && (
             <Button size="sm" variant="ghost" onClick={accionDuplicar} disabled={actuando}>
               <Copy size={14} /> Duplicar
             </Button>
           )}
-          {!puedeEnviar && !puedeAprobar && !puedeCancelar && (
+          {!puedeEnviar && !puedeAprobar && !puedeCancelar && !puedeRecepcionar && (
             <span className="text-xs text-muted-foreground">Sin acciones disponibles para el estado actual.</span>
           )}
         </CardContent>
