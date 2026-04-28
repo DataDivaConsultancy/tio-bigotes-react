@@ -8,6 +8,7 @@ import EstadoBadge from '@/components/compras/EstadoBadge'
 import { listarPedidos } from '@/lib/compras/pedidos'
 import type { Pedido, EstadoPedido } from '@/lib/schemas/pedidos'
 import { ESTADO_LABELS } from '@/lib/schemas/pedidos'
+import { useRealtimePedidos } from '@/hooks/compras/useRealtimePedidos'
 
 const ESTADOS_FILTRO: { value: EstadoPedido | ''; label: string }[] = [
   { value: '', label: 'Todos los estados' },
@@ -55,6 +56,9 @@ export default function ListaPedidos() {
     cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estadoFiltro])
+
+  // Realtime: refrescar cuando cambia cualquier pedido
+  useRealtimePedidos({ onChange: cargar })
 
   function onSearchSubmit(e: React.FormEvent) {
     e.preventDefault()

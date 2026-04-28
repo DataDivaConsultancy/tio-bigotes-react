@@ -11,6 +11,7 @@ import {
   obtenerPedido, enviarPedido, aprobarPedido, cancelarPedido, duplicarPedido,
 } from '@/lib/compras/pedidos'
 import type { EstadoPedido } from '@/lib/schemas/pedidos'
+import { useRealtimePedidos } from '@/hooks/compras/useRealtimePedidos'
 
 interface PedidoCabecera {
   id: string
@@ -141,6 +142,8 @@ export default function DetallePedido() {
   }
 
   useEffect(() => { cargar() /* eslint-disable-next-line */ }, [id])
+
+  useRealtimePedidos({ pedidoId: id, onChange: cargar, enabled: !!id })
 
   // ── Acciones ──
   async function accionEnviar() {

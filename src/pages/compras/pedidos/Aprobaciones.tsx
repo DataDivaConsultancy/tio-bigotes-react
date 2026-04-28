@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { listarPedidos, aprobarPedido } from '@/lib/compras/pedidos'
 import type { Pedido } from '@/lib/schemas/pedidos'
+import { useRealtimePedidos } from '@/hooks/compras/useRealtimePedidos'
 
 function formatEUR(n: number | string | null | undefined) {
   if (n == null) return '—'
@@ -48,6 +49,8 @@ export default function AprobacionesPedidos() {
   }
 
   useEffect(() => { cargar() }, [])
+
+  useRealtimePedidos({ onChange: cargar })
 
   async function ejecutar(p: Pedido, decision: 'aprobado' | 'rechazado' | 'devuelto') {
     const labels = { aprobado: 'aprobar', rechazado: 'rechazar', devuelto: 'devolver a borrador' }
