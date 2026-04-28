@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react'
 import { supabase, rpcCall } from '@/lib/supabase'
-import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Search, Pencil, Check, X, ShoppingCart } from 'lucide-react'
+import { Plus, Search, Pencil, Check, X, ShoppingCart } from 'lucide-react'
 
 interface ProductoCompra {
   id: number
   nombre: string
   proveedor_id: number | null
-  precio_coste: number | null
-  unidad_compra: string | null
-  cantidad_minima: number | null
-  notas: string | null
+  cod_proveedor: string | null
+  cod_interno: string | null
+  precio: number | null
+  tipo_iva: string | null
+  unidad_medida: string | null
+  unidad_minima_compra: number | null
+  stock_minimo: number | null
+  dia_pedido: string | null
+  dia_entrega: string | null
   activo: boolean
 }
 
@@ -22,6 +26,15 @@ interface ProveedorOption {
   nombre_comercial: string
 }
 
+const TIPO_IVA_OPTIONS = [
+  { value: 'General 21%',      label: 'General (21%)' },
+  { value: 'Reducido 10%',     label: 'Reducido (10%)' },
+  { value: 'Superreducido 4%', label: 'Superreducido (4%)' },
+  { value: 'Exento 0%',        label: 'Exento (0%)' },
+]
+
+const UNIDADES_OPTIONS = ['unidad', 'kg', 'g', 'l', 'ml', 'caja', 'pack', 'saco', 'garrafa', 'palet', 'bandeja', 'bidon', 'docena']
+
 export default function ProductosCompra() {
   const [productos, setProductos] = useState<ProductoCompra[]>([])
   const [proveedores, setProveedores] = useState<ProveedorOption[]>([])
@@ -29,21 +42,25 @@ export default function ProductosCompra() {
   const [search, setSearch] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [editing, setEditing] = useState<ProductoCompra | null>(null)
+  const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const [form, setForm] = useState<Partial<ProductoCompra>>({})
 
   useEffect(() => {
     loadProductos()
     loadProveedores()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive])
 
   async function loadProveedores() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('proveedores_v2')
       .select('id, nombre_comercial')
       .eq('activo', true)
       .order('nombre_comercial')
+    if (error) { console.error('loadProveedores:', error); return }
     if (data) setProveedores(data)
   }
 
@@ -51,49 +68,83 @@ export default function ProductosCompra() {
     setLoading(true)
     let query = supabase
       .from('productos_compra_v2')
-      .select('id, nombre, proveedor_id, precio_coste, unidad_compra, cantidad_minima, notas, activo')
+      .select('id, nombre, proveedor_id, cod_proveedor, cod_interno, precio, tipo_iva, unidad_medida, unidad_minima_compra, stock_minimo, dia_pedido, dia_entrega, activo')
       .order('nombre')
-
     if (!showInactive) query = query.eq('activo', true)
-
     const { data, error } = await query
-    if (!error && data) setProductos(data)
+    if (error) {
+      console.error('loadProductos:', error)
+      setErrorMsg(error.message)
+      setLoading(false)
+      return
+    }
+    setErrorMsg(null)
+    if (data) setProductos(data as ProductoCompra[])
     setLoading(false)
   }
 
   const filtered = productos.filter((p) => {
     const q = search.toLowerCase()
-    return p.nombre.toLowerCase().includes(q)
+    return (
+      p.nombre.toLowerCase().includes(q) ||
+      (p.cod_proveedor || '').toLowerCase().includes(q) ||
+      (p.cod_interno || '').toLowerCase().includes(q)
+    )
   })
 
   const proveedorMap = new Map(proveedores.map((pv) => [pv.id, pv.nombre_comercial]))
 
+  function startCreate() {
+    setCreating(true)
+    setEditing(null)
+    setForm({ activo: true })
+  }
   function startEdit(p: ProductoCompra) {
     setEditing(p)
+    setCreating(false)
     setForm({ ...p })
   }
-
   function cancelEdit() {
     setEditing(null)
+    setCreating(false)
     setForm({})
+    setErrorMsg(null)
   }
 
   async function save() {
-    if (!editing || !form.nombre?.trim()) return
+    if (!form.nombre?.trim()) return
     setSaving(true)
+    setErrorMsg(null)
 
-    const result = await rpcCall('rpc_actualizar_producto_compra', {
-      p_id: editing.id,
+    const payload = {
       p_nombre: form.nombre,
-      p_proveedor_id: form.proveedor_id || null,
-      p_precio_coste: form.precio_coste ?? null,
-      p_unidad_compra: form.unidad_compra || null,
-      p_cantidad_minima: form.cantidad_minima ?? null,
-      p_notas: form.notas || null,
-      p_activo: form.activo,
-    })
+      p_proveedor_id: form.proveedor_id ?? null,
+      p_cod_proveedor: form.cod_proveedor ?? null,
+      p_cod_interno: form.cod_interno ?? null,
+      p_unidad_medida: form.unidad_medida ?? null,
+      p_unidad_minima_compra: form.unidad_minima_compra ?? null,
+      p_dia_pedido: form.dia_pedido ?? null,
+      p_dia_entrega: form.dia_entrega ?? null,
+      p_precio: form.precio ?? null,
+      p_tipo_iva: form.tipo_iva ?? null,
+      p_stock_minimo: form.stock_minimo ?? 0,
+    }
+
+    let result
+    if (creating) {
+      result = await rpcCall('rpc_crear_producto_compra', payload)
+    } else if (editing) {
+      result = await rpcCall('rpc_actualizar_producto_compra', {
+        p_id: editing.id,
+        ...payload,
+        p_activo: form.activo,
+      })
+    } else {
+      setSaving(false); return
+    }
+
     if (!result.ok) {
-      alert(result.error || 'Error al actualizar producto')
+      setErrorMsg(result.error || 'Error al guardar el producto')
       setSaving(false)
       return
     }
@@ -103,7 +154,7 @@ export default function ProductosCompra() {
     loadProductos()
   }
 
-  const isEditing = editing !== null
+  const isEditing = creating || editing !== null
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -118,6 +169,9 @@ export default function ProductosCompra() {
             <p className="text-sm text-muted-foreground">{filtered.length} productos</p>
           </div>
         </div>
+        <Button onClick={startCreate} disabled={isEditing}>
+          <Plus size={16} /> Nuevo producto
+        </Button>
       </div>
 
       {/* Filters */}
@@ -125,7 +179,7 @@ export default function ProductosCompra() {
         <div className="relative flex-1 max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre..."
+            placeholder="Buscar por nombre o código..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -142,150 +196,187 @@ export default function ProductosCompra() {
         </label>
       </div>
 
-      {/* Create/Edit form */}
+      {errorMsg && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-3 text-sm text-red-700">{errorMsg}</CardContent>
+        </Card>
+      )}
+
+      {/* Form Crear/Editar */}
       {isEditing && (
         <Card className="border-primary/30 shadow-md">
           <CardHeader className="pb-4">
             <CardTitle className="text-base">
-              Editando: {editing?.nombre}
+              {creating ? 'Nuevo producto' : `Editando: ${editing?.nombre}`}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
+              <div className="md:col-span-2">
                 <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
                 <Input value={form.nombre || ''} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Proveedor</label>
                 <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={form.proveedor_id ?? ''}
-                  onChange={(e) => setForm({ ...form, proveedor_id: e.target.value ? Number(e.target.value) : undefined })}
+                  onChange={(e) => setForm({ ...form, proveedor_id: e.target.value ? Number(e.target.value) : null })}
+                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   <option value="">— Sin proveedor —</option>
-                  {proveedores.map((pv) => (
-                    <option key={pv.id} value={pv.id}>{pv.nombre_comercial}</option>
+                  {proveedores.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre_comercial}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Precio coste (EUR)</label>
+                <label className="text-xs font-medium text-muted-foreground">Código proveedor</label>
+                <Input value={form.cod_proveedor || ''} onChange={(e) => setForm({ ...form, cod_proveedor: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Código interno</label>
+                <Input value={form.cod_interno || ''} onChange={(e) => setForm({ ...form, cod_interno: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Unidad de medida</label>
+                <select
+                  value={form.unidad_medida ?? ''}
+                  onChange={(e) => setForm({ ...form, unidad_medida: e.target.value || null })}
+                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">—</option>
+                  {UNIDADES_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Cantidad mínima compra</label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.precio_coste ?? ''}
-                  onChange={(e) => setForm({ ...form, precio_coste: e.target.value ? Number(e.target.value) : undefined })}
+                  type="number" step="any" min={0}
+                  value={form.unidad_minima_compra ?? ''}
+                  onChange={(e) => setForm({ ...form, unidad_minima_compra: e.target.value ? Number(e.target.value) : null })}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Unidad de compra</label>
+                <label className="text-xs font-medium text-muted-foreground">Precio (€)</label>
                 <Input
-                  value={form.unidad_compra || ''}
-                  onChange={(e) => setForm({ ...form, unidad_compra: e.target.value })}
-                  placeholder="Ej: kg, caja, ud"
+                  type="number" step="0.01" min={0}
+                  value={form.precio ?? ''}
+                  onChange={(e) => setForm({ ...form, precio: e.target.value ? Number(e.target.value) : null })}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Cantidad mínima</label>
+                <label className="text-xs font-medium text-muted-foreground">Tipo IVA</label>
+                <select
+                  value={form.tipo_iva ?? ''}
+                  onChange={(e) => setForm({ ...form, tipo_iva: e.target.value || null })}
+                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">— Seleccionar —</option>
+                  {TIPO_IVA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Stock mínimo</label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.cantidad_minima ?? ''}
-                  onChange={(e) => setForm({ ...form, cantidad_minima: e.target.value ? Number(e.target.value) : undefined })}
+                  type="number" step="any" min={0}
+                  value={form.stock_minimo ?? ''}
+                  onChange={(e) => setForm({ ...form, stock_minimo: e.target.value ? Number(e.target.value) : null })}
                 />
               </div>
-              <div className="md:col-span-2">
-                <label className="text-xs font-medium text-muted-foreground">Notas</label>
-                <textarea
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-y"
-                  value={form.notas || ''}
-                  onChange={(e) => setForm({ ...form, notas: e.target.value })}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Día pedido</label>
+                <Input
+                  value={form.dia_pedido || ''}
+                  onChange={(e) => setForm({ ...form, dia_pedido: e.target.value })}
+                  placeholder="Lunes, Miércoles…"
                 />
               </div>
-              {editing && (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-muted-foreground">Activo</label>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Día entrega</label>
+                <Input
+                  value={form.dia_entrega || ''}
+                  onChange={(e) => setForm({ ...form, dia_entrega: e.target.value })}
+                  placeholder="Martes, Jueves…"
+                />
+              </div>
+              {!creating && (
+                <div className="flex items-center gap-2 mt-6">
                   <input
-                    type="checkbox"
+                    type="checkbox" id="activo-edit"
                     checked={form.activo ?? true}
                     onChange={(e) => setForm({ ...form, activo: e.target.checked })}
+                    className="rounded"
                   />
+                  <label htmlFor="activo-edit" className="text-sm">Activo</label>
                 </div>
               )}
             </div>
-            <div className="flex justify-end gap-2 mt-5">
+
+            <div className="flex justify-end gap-2 mt-6">
               <Button variant="outline" onClick={cancelEdit} disabled={saving}>
-                <X size={14} /> Cancelar
+                <X size={16} /> Cancelar
               </Button>
               <Button onClick={save} disabled={saving || !form.nombre?.trim()}>
-                {saving ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <Check size={14} />}
-                Guardar
+                <Check size={16} /> {saving ? 'Guardando…' : (creating ? 'Crear' : 'Guardar')}
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Table */}
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      ) : (
-        <div className="bg-card rounded-xl border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Proveedor</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground">Precio coste</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Unidad</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Cant. min</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground w-20"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr
-                    key={p.id}
-                    className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${!p.activo ? 'opacity-50' : ''}`}
-                  >
-                    <td className="py-3 px-4 font-medium">{p.nombre}</td>
-                    <td className="py-3 px-4 hidden md:table-cell text-muted-foreground">
-                      {p.proveedor_id ? proveedorMap.get(p.proveedor_id) || '—' : '—'}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      {p.precio_coste != null ? formatCurrency(p.precio_coste) : '—'}
-                    </td>
-                    <td className="py-3 px-4 hidden md:table-cell text-muted-foreground">{p.unidad_compra || '—'}</td>
-                    <td className="py-3 px-4 text-right hidden lg:table-cell text-muted-foreground">{p.cantidad_minima ?? '—'}</td>
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => startEdit(p)}
-                        disabled={isEditing}
-                        className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground disabled:opacity-30"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    </td>
+      {/* Tabla */}
+      {!loading && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 border-b">
+                  <tr className="text-left">
+                    <th className="px-4 py-3 font-semibold">Nombre</th>
+                    <th className="px-4 py-3 font-semibold">Proveedor</th>
+                    <th className="px-4 py-3 font-semibold">Unidad</th>
+                    <th className="px-4 py-3 font-semibold text-right">Precio</th>
+                    <th className="px-4 py-3 font-semibold">IVA</th>
+                    <th className="px-4 py-3 font-semibold text-right">Stock min</th>
+                    <th className="px-4 py-3 font-semibold w-12"></th>
                   </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                      No se encontraron productos
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                </thead>
+                <tbody>
+                  {filtered.map((p) => (
+                    <tr key={p.id} className={`border-b last:border-0 hover:bg-muted/30 ${!p.activo ? 'opacity-50' : ''}`}>
+                      <td className="px-4 py-2">
+                        <div className="font-medium">{p.nombre}</div>
+                        {p.cod_proveedor && <div className="text-xs text-muted-foreground">{p.cod_proveedor}</div>}
+                      </td>
+                      <td className="px-4 py-2">{p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? '—' : '—'}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{p.unidad_medida ?? '—'}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        {p.precio != null
+                          ? Number(p.precio).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">{p.tipo_iva ?? '—'}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{p.stock_minimo ?? '—'}</td>
+                      <td className="px-4 py-2">
+                        <Button variant="ghost" size="icon" onClick={() => startEdit(p)} disabled={isEditing}>
+                          <Pencil size={14} />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                      {productos.length === 0 ? 'Aún no hay productos. Crea el primero.' : 'No hay productos que coincidan con la búsqueda.'}
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
+
+      {loading && <div className="text-center text-muted-foreground py-8">Cargando…</div>}
     </div>
   )
 }
