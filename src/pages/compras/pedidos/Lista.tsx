@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, FileText, Filter, RefreshCw } from 'lucide-react'
+import { Plus, Search, FileText, Filter, RefreshCw, Inbox } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -28,6 +28,7 @@ export default function ListaPedidos() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoPedido | ''>('')
+  const [pendientes, setPendientes] = useState(0)
 
   async function cargar() {
     setLoading(true)
@@ -38,6 +39,11 @@ export default function ListaPedidos() {
         buscar: search || undefined,
       })
       setPedidos(data)
+      // Contar pendientes (siempre, independiente del filtro)
+      try {
+        const pendientesData = await listarPedidos({ estado: 'pendiente_aprobacion' })
+        setPendientes(pendientesData.length)
+      } catch { /* ignore */ }
     } catch (e: any) {
       setError(e.message || 'Error cargando pedidos')
     } finally {
@@ -74,6 +80,18 @@ export default function ListaPedidos() {
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             Actualizar
           </Button>
+          {pendientes > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => navigate('/compras/pedidos/aprobaciones')}
+              className="border-amber-300 text-amber-700 hover:bg-amber-50"
+            >
+              <Inbox size={16} /> Aprobaciones
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold tabular-nums">
+                {pendientes}
+              </span>
+            </Button>
+          )}
           <Button onClick={() => navigate('/compras/pedidos/nuevo')}>
             <Plus size={16} /> Nuevo pedido
           </Button>
