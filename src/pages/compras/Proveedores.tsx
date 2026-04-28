@@ -52,6 +52,9 @@ export default function Proveedores() {
   const [form, setForm] = useState<Partial<Proveedor>>({})
   const [contacto, setContacto] = useState<Contacto>({})
   const [categoriasSel, setCategoriasSel] = useState<Set<number>>(new Set())
+  const [nuevaCatNombre, setNuevaCatNombre] = useState('')
+  const [creandoCat, setCreandoCat] = useState(false)
+  const [showInputNuevaCat, setShowInputNuevaCat] = useState(false)
 
   useEffect(() => {
     loadProveedores()
@@ -137,6 +140,27 @@ export default function Proveedores() {
       else next.add(id)
       return next
     })
+  }
+
+  async function crearCategoria() {
+    const nombre = nuevaCatNombre.trim()
+    if (!nombre) return
+    setCreandoCat(true); setErrorMsg(null)
+    const res = await rpcCall<{ id: number; nombre: string }>('rpc_crear_categoria_producto', { p_nombre: nombre })
+    setCreandoCat(false)
+    if (!res.ok) {
+      setErrorMsg(res.error === 'ya_existe' ? `Ya existe una categoría con ese nombre` : (res.error || 'Error al crear categoría'))
+      return
+    }
+    const nueva = (res as any).data ?? res
+    if (nueva && nueva.id) {
+      setCategorias((prev) => [...prev, nueva].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setCategoriasSel((prev) => new Set([...prev, nueva.id]))
+    } else {
+      await loadCategorias()
+    }
+    setNuevaCatNombre('')
+    setShowInputNuevaCat(false)
   }
 
   async function save() {
@@ -309,6 +333,51 @@ export default function Proveedores() {
               {categoriasSel.size > 0 && (
                 <p className="text-xs text-muted-foreground mt-2">{categoriasSel.size} categoría{categoriasSel.size === 1 ? '' : 's'} seleccionada{categoriasSel.size === 1 ? '' : 's'}</p>
               )}
+
+              {/* Crear categoría nueva */}
+              <div className="mt-3">
+                {!showInputNuevaCat ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowInputNuevaCat(true)}
+                  >
+                    <Plus size={14} /> Nueva categoría
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 max-w-md">
+                    <Input
+                      autoFocus
+                      placeholder="Nombre de la categoría…"
+                      value={nuevaCatNombre}
+                      onChange={(e) => setNuevaCatNombre(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); crearCategoria() }
+                        if (e.key === 'Escape') { setShowInputNuevaCat(false); setNuevaCatNombre('') }
+                      }}
+                      disabled={creandoCat}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={crearCategoria}
+                      disabled={creandoCat || !nuevaCatNombre.trim()}
+                    >
+                      {creandoCat ? '…' : 'Crear'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setShowInputNuevaCat(false); setNuevaCatNombre('') }}
+                      disabled={creandoCat}
+                    >
+                      <X size={14} />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Persona de contacto */}
