@@ -248,7 +248,14 @@ export default function CrearPedido() {
                       <th className="px-4 py-2 font-semibold">Formato</th>
                       <th className="px-4 py-2 font-semibold text-right">Precio</th>
                       <th className="px-4 py-2 font-semibold text-center">IVA</th>
-                      <th className="px-4 py-2 font-semibold text-center w-44">Cantidad <span className="text-[10px] font-normal text-muted-foreground">(en unidad de compra)</span></th>
+                      <th className="px-4 py-2 font-semibold text-center w-44">
+                        Cantidad
+                        <div className="text-[10px] font-normal text-muted-foreground">paquetes / cajas</div>
+                      </th>
+                      <th className="px-4 py-2 font-semibold text-center w-28">
+                        Unidades
+                        <div className="text-[10px] font-normal text-muted-foreground">en stock</div>
+                      </th>
                       <th className="px-4 py-2 font-semibold text-right">Total línea</th>
                     </tr>
                   </thead>
@@ -280,35 +287,40 @@ export default function CrearPedido() {
                           <td className="px-4 py-2 text-center">{tienePrecio ? `${iva}%` : '—'}</td>
                           <td className="px-4 py-2">
                             {tienePrecio ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <div className="flex items-center justify-center gap-1">
-                                  <Button
-                                    variant="outline" size="icon" type="button"
-                                    onClick={() => ajustarCantidad(c.formato_id, -1, c.multiplo_pedido)}
-                                    className="w-8 h-8"
-                                  ><Minus size={14} /></Button>
-                                  <Input
-                                    type="number" min={0} step="any"
-                                    value={qty || ''}
-                                    onChange={(e) => setCantidad(c.formato_id, Number(e.target.value))}
-                                    className="w-20 text-center"
-                                    placeholder="0"
-                                  />
-                                  <Button
-                                    variant="outline" size="icon" type="button"
-                                    onClick={() => ajustarCantidad(c.formato_id, 1, c.multiplo_pedido)}
-                                    className="w-8 h-8"
-                                  ><Plus size={14} /></Button>
-                                </div>
-                                {qty > 0 && c.factor_conversion && c.factor_conversion !== 1 && (
-                                  <div className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
-                                    = {(qty * c.factor_conversion).toLocaleString('es-ES')} {c.unidad_uso} en stock
-                                  </div>
-                                )}
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="outline" size="icon" type="button"
+                                  onClick={() => ajustarCantidad(c.formato_id, -1, c.multiplo_pedido)}
+                                  className="w-8 h-8"
+                                ><Minus size={14} /></Button>
+                                <Input
+                                  type="number" min={0} step="any"
+                                  value={qty || ''}
+                                  onChange={(e) => setCantidad(c.formato_id, Number(e.target.value))}
+                                  className="w-20 text-center"
+                                  placeholder="0"
+                                />
+                                <Button
+                                  variant="outline" size="icon" type="button"
+                                  onClick={() => ajustarCantidad(c.formato_id, 1, c.multiplo_pedido)}
+                                  className="w-8 h-8"
+                                ><Plus size={14} /></Button>
                               </div>
                             ) : (
                               <div className="text-center text-xs text-muted-foreground">Asigna precio en Productos Compra</div>
                             )}
+                          </td>
+                          <td className="px-4 py-2 text-center tabular-nums">
+                            {tienePrecio ? (
+                              qty > 0 ? (
+                                <div>
+                                  <div className="font-medium">
+                                    {(qty * (c.factor_conversion || 1)).toLocaleString('es-ES')}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">{c.unidad_uso}</div>
+                                </div>
+                              ) : <span className="text-muted-foreground">—</span>
+                            ) : <span className="text-muted-foreground">—</span>}
                           </td>
                           <td className="px-4 py-2 text-right tabular-nums">
                             {qty > 0 && tienePrecio
