@@ -96,7 +96,8 @@ export default function CrearPedido() {
       const qty = cantidades[c.formato_id] ?? 0
       const desc = c.descuento_pct ?? 0
       const iva = c.iva_pct ?? 21
-      const base = qty * (c.precio ?? 0) * (1 - desc / 100)
+      const factor = c.factor_conversion ?? 1
+      const base = qty * factor * (c.precio ?? 0) * (1 - desc / 100)
       subtotal += base
       ivaTotal += base * (iva / 100)
     }
@@ -265,7 +266,8 @@ export default function CrearPedido() {
                       const tienePrecio = c.precio != null
                       const desc = c.descuento_pct ?? 0
                       const iva = c.iva_pct ?? 21
-                      const base = qty * (c.precio ?? 0) * (1 - desc / 100)
+                      const factor = c.factor_conversion ?? 1
+                      const base = qty * factor * (c.precio ?? 0) * (1 - desc / 100)
                       const totalLinea = base * (1 + iva / 100)
                       return (
                         <tr key={c.formato_id} className={`border-b last:border-0 ${qty > 0 ? 'bg-blue-50/30' : ''} ${!tienePrecio ? 'opacity-60' : ''}`}>
