@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, rpcCall } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,15 +52,32 @@ export default function Proveedores() {
   const [form, setForm] = useState<Partial<Proveedor>>({})
   const [contacto, setContacto] = useState<Contacto>({})
   const [categoriasSel, setCategoriasSel] = useState<Set<number>>(new Set())
-  const [nuevaCatNombre, setNuevaCatNombre] = useState('')
+  const [searchCat, setSearchCat] = useState('')
+  const [dropdownOpen, setDropdownOpen] = useState(false)
   const [creandoCat, setCreandoCat] = useState(false)
-  const [showInputNuevaCat, setShowInputNuevaCat] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const categoriasFiltradas = useMemo(() => {
+    const q = searchCat.toLowerCase().trim()
+    if (!q) return categorias
+    return categorias.filter((c) => c.nombre.toLowerCase().includes(q))
+  }, [categorias, searchCat])
 
   useEffect(() => {
     loadProveedores()
     loadCategorias()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive])
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    if (dropdownOpen) document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [dropdownOpen])
 
   async function loadProveedores() {
     setLoading(true)
@@ -142,11 +159,11 @@ export default function Proveedores() {
     })
   }
 
-  async function crearCategoria() {
-    const nombre = nuevaCatNombre.trim()
-    if (!nombre) return
+  async function crearCategoria(nombre: string) {
+    const n = nombre.trim()
+    if (!n) return
     setCreandoCat(true); setErrorMsg(null)
-    const res = await rpcCall<{ id: number; nombre: string }>('rpc_crear_categoria_producto', { p_nombre: nombre })
+    const res = await rpcCall<{ id: number; nombre: string }>('rpc_crear_categoria_producto', { p_nombre: n })
     setCreandoCat(false)
     if (!res.ok) {
       setErrorMsg(res.error === 'ya_existe' ? `Ya existe una categoría con ese nombre` : (res.error || 'Error al crear categoría'))
@@ -159,8 +176,7 @@ export default function Proveedores() {
     } else {
       await loadCategorias()
     }
-    setNuevaCatNombre('')
-    setShowInputNuevaCat(false)
+    setSearchCat('')
   }
 
   async function save() {
@@ -307,77 +323,99 @@ export default function Proveedores() {
             {/* Categorías (multi-select) */}
             <div>
               <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Categorías de productos que suministra</h3>
-              {categorias.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Cargando categorías…</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {categorias.map((c) => {
-                    const sel = categoriasSel.has(c.id)
-                    return (
+              {/* Chips de las seleccionadas */}
+              <div className="flex flex-wrap gap-2 mb-3 min-h-[28px]">
+                {Array.from(categoriasSel).map((catId) => {
+                  const cat = categorias.find((c) => c.id === catId)
+                  if (!cat) return null
+                  return (
+                    <span
+                      key={cat.id}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-teal-500 text-white"
+                    >
+                      {cat.nombre}
                       <button
-                        key={c.id}
                         type="button"
-                        onClick={() => toggleCategoria(c.id)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                          sel
-                            ? 'bg-teal-500 text-white border-teal-500'
-                            : 'bg-background text-muted-foreground border-border hover:border-teal-400 hover:text-teal-600'
-                        }`}
+                        onClick={() => toggleCategoria(cat.id)}
+                        className="hover:bg-teal-600 rounded-full p-0.5 -mr-1"
+                        aria-label={`Quitar ${cat.nombre}`}
                       >
-                        {c.nombre}
+                        <X size={12} />
                       </button>
-                    )
-                  })}
-                </div>
-              )}
-              {categoriasSel.size > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">{categoriasSel.size} categoría{categoriasSel.size === 1 ? '' : 's'} seleccionada{categoriasSel.size === 1 ? '' : 's'}</p>
-              )}
+                    </span>
+                  )
+                })}
+                {categoriasSel.size === 0 && (
+                  <span className="text-xs text-muted-foreground">Ninguna seleccionada todavía. Usa el buscador para añadir.</span>
+                )}
+              </div>
 
-              {/* Crear categoría nueva */}
-              <div className="mt-3">
-                {!showInputNuevaCat ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowInputNuevaCat(true)}
-                  >
-                    <Plus size={14} /> Nueva categoría
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-2 max-w-md">
-                    <Input
-                      autoFocus
-                      placeholder="Nombre de la categoría…"
-                      value={nuevaCatNombre}
-                      onChange={(e) => setNuevaCatNombre(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.preventDefault(); crearCategoria() }
-                        if (e.key === 'Escape') { setShowInputNuevaCat(false); setNuevaCatNombre('') }
-                      }}
-                      disabled={creandoCat}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={crearCategoria}
-                      disabled={creandoCat || !nuevaCatNombre.trim()}
-                    >
-                      {creandoCat ? '…' : 'Crear'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => { setShowInputNuevaCat(false); setNuevaCatNombre('') }}
-                      disabled={creandoCat}
-                    >
-                      <X size={14} />
-                    </Button>
+              {/* Buscador desplegable */}
+              <div className="relative max-w-md" ref={dropdownRef}>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                  <Input
+                    placeholder="Buscar categoría o crear nueva…"
+                    value={searchCat}
+                    onFocus={() => setDropdownOpen(true)}
+                    onClick={() => setDropdownOpen(true)}
+                    onChange={(e) => { setSearchCat(e.target.value); setDropdownOpen(true) }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setDropdownOpen(false); setSearchCat('') }
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const match = categoriasFiltradas[0]
+                        if (match) {
+                          if (!categoriasSel.has(match.id)) toggleCategoria(match.id)
+                          setSearchCat('')
+                        } else if (searchCat.trim()) {
+                          crearCategoria(searchCat)
+                        }
+                      }
+                    }}
+                    className="pl-9"
+                  />
+                </div>
+
+                {dropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 z-30 bg-card border rounded-md shadow-lg max-h-64 overflow-y-auto">
+                    {categoriasFiltradas.length > 0 ? (
+                      categoriasFiltradas.map((c) => {
+                        const sel = categoriasSel.has(c.id)
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => { toggleCategoria(c.id); setSearchCat('') }}
+                            className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between hover:bg-muted/60 ${sel ? 'bg-teal-50' : ''}`}
+                          >
+                            <span>{c.nombre}</span>
+                            {sel && <Check size={14} className="text-teal-600" />}
+                          </button>
+                        )
+                      })
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                        {searchCat.trim() ? 'Sin resultados.' : 'No hay categorías.'}
+                      </div>
+                    )}
+                    {searchCat.trim() && !categorias.some((c) => c.nombre.toLowerCase() === searchCat.trim().toLowerCase()) && (
+                      <button
+                        type="button"
+                        onClick={() => crearCategoria(searchCat)}
+                        disabled={creandoCat}
+                        className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 border-t hover:bg-emerald-50 text-emerald-700 font-medium"
+                      >
+                        <Plus size={14} />
+                        {creandoCat ? 'Creando…' : `Crear "${searchCat.trim()}"`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
+              {categoriasSel.size > 0 && (
+                <p className="text-xs text-muted-foreground mt-2">{categoriasSel.size} categoría{categoriasSel.size === 1 ? '' : 's'} seleccionada{categoriasSel.size === 1 ? '' : 's'}</p>
+              )}
             </div>
 
             {/* Persona de contacto */}
