@@ -15,6 +15,7 @@ interface ProductoCompra {
   tipo_iva: string | null
   unidad_medida: string | null
   unidad_minima_compra: number | null
+  unidades_por_paquete: number | null
   stock_minimo: number | null
   dia_pedido: string | null
   dia_entrega: string | null
@@ -68,7 +69,7 @@ export default function ProductosCompra() {
     setLoading(true)
     let query = supabase
       .from('productos_compra_v2')
-      .select('id, nombre, proveedor_id, cod_proveedor, cod_interno, precio, tipo_iva, unidad_medida, unidad_minima_compra, stock_minimo, dia_pedido, dia_entrega, activo')
+      .select('id, nombre, proveedor_id, cod_proveedor, cod_interno, precio, tipo_iva, unidad_medida, unidad_minima_compra, unidades_por_paquete, stock_minimo, dia_pedido, dia_entrega, activo')
       .order('nombre')
     if (!showInactive) query = query.eq('activo', true)
     const { data, error } = await query
@@ -123,6 +124,7 @@ export default function ProductosCompra() {
       p_cod_interno: form.cod_interno ?? null,
       p_unidad_medida: form.unidad_medida ?? null,
       p_unidad_minima_compra: form.unidad_minima_compra ?? null,
+      p_unidades_por_paquete: form.unidades_por_paquete ?? 1,
       p_dia_pedido: form.dia_pedido ?? null,
       p_dia_entrega: form.dia_entrega ?? null,
       p_precio: form.precio ?? null,
@@ -257,6 +259,21 @@ export default function ProductosCompra() {
                 />
               </div>
               <div>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Unidades por paquete
+                  <span className="ml-1 text-[10px] text-muted-foreground/70">(stock real al recibir)</span>
+                </label>
+                <Input
+                  type="number" step="any" min={1}
+                  value={form.unidades_por_paquete ?? ''}
+                  onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null })}
+                  placeholder="1"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Ej: caja de 12 botellas → 12. Una empanada suelta → 1.
+                </p>
+              </div>
+              <div>
                 <label className="text-xs font-medium text-muted-foreground">Precio (€)</label>
                 <Input
                   type="number" step="0.01" min={0}
@@ -337,6 +354,7 @@ export default function ProductosCompra() {
                     <th className="px-4 py-3 font-semibold">Unidad</th>
                     <th className="px-4 py-3 font-semibold text-right">Precio</th>
                     <th className="px-4 py-3 font-semibold">IVA</th>
+                    <th className="px-4 py-3 font-semibold text-right">Uds/paq</th>
                     <th className="px-4 py-3 font-semibold text-right">Stock min</th>
                     <th className="px-4 py-3 font-semibold w-12"></th>
                   </tr>
@@ -356,6 +374,7 @@ export default function ProductosCompra() {
                           : '—'}
                       </td>
                       <td className="px-4 py-2 text-xs text-muted-foreground">{p.tipo_iva ?? '—'}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{p.unidades_por_paquete ?? 1}</td>
                       <td className="px-4 py-2 text-right tabular-nums">{p.stock_minimo ?? '—'}</td>
                       <td className="px-4 py-2">
                         <Button variant="ghost" size="icon" onClick={() => startEdit(p)} disabled={isEditing}>
@@ -365,7 +384,7 @@ export default function ProductosCompra() {
                     </tr>
                   ))}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                       {productos.length === 0 ? 'Aún no hay productos. Crea el primero.' : 'No hay productos que coincidan con la búsqueda.'}
                     </td></tr>
                   )}
