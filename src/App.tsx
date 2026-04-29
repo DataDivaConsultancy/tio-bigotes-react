@@ -18,10 +18,10 @@ import CargaVentas from '@/pages/CargaVentas'
 import CargaProductos from '@/pages/CargaProductos'
 import Auditoria from '@/pages/Auditoria'
 import Proveedores from '@/pages/compras/Proveedores'
-import ProductosCompra from '@/pages/compras/ProductosCompra'
+// ProductosCompra eliminado — unificado en Productos
 import Locales from '@/pages/compras/Locales'
 import Stock from '@/pages/compras/Stock'
-// Módulo de Compras v2 (MVP1)
+// MÃ³dulo de Compras v2 (MVP1)
 import ComprasDashboard from '@/pages/compras/Dashboard'
 import ListaPedidos from '@/pages/compras/pedidos/Lista'
 import CrearPedido from '@/pages/compras/pedidos/Crear'
@@ -55,7 +55,7 @@ function AppRoutes() {
       >
         <Route path="/" element={<Home />} />
 
-        {/* Gestión */}
+        {/* GestiÃ³n */}
         <Route
           path="/productos"
           element={
@@ -158,14 +158,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/productos-compra"
-          element={
-            <ProtectedRoute screen="ProductosCompra">
-              <ProductosCompra />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/productos-compra" element={<Navigate to="/productos" replace />} />
         <Route
           path="/locales"
           element={
@@ -183,7 +176,7 @@ function AppRoutes() {
           }
         />
 
-        {/* Módulo de Compras v2 — MVP1 */}
+        {/* MÃ³dulo de Compras v2 â MVP1 */}
         <Route
           path="/compras"
           element={
@@ -257,7 +250,7 @@ function AppRoutes() {
           }
         />
 
-        {/* Compras — Fase 2 (placeholders) */}
+        {/* Compras â Fase 2 (placeholders) */}
         <Route
           path="/compras/albaranes"
           element={
