@@ -23,7 +23,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { key: 'Home', label: 'Inicio', icon: Home, path: '/' },
-  { key: 'Productos', label: 'Productos', icon: Package, path: '/productos', section: 'Gestión' },
+  { key: 'Productos', label: 'Productos', icon: Package, path: '/productos', section: 'GestiÃ³n' },
   { key: 'Empleados', label: 'Empleados', icon: Users, path: '/empleados' },
     { key: 'Roles', label: 'Roles', icon: KeyRound, path: '/roles' },
   { key: 'Operativa', label: 'Control Diario', icon: ClipboardList, path: '/operativa', section: 'Operaciones' },
@@ -32,16 +32,16 @@ const navItems: NavItem[] = [
   { key: 'Pendientes', label: 'Pendientes', icon: AlertCircle, path: '/pendientes' },
   { key: 'CargaVentas', label: 'Subir CSV Ventas', icon: Upload, path: '/carga-ventas', section: 'Datos' },
   { key: 'CargaProductos', label: 'Subir CSV Productos', icon: Database, path: '/carga-productos' },
-  { key: 'Auditoria', label: 'Auditoría', icon: Shield, path: '/auditoria' },
+  { key: 'Auditoria', label: 'AuditorÃ­a', icon: Shield, path: '/auditoria' },
   { key: 'ComprasDashboard', label: 'Dashboard Compras', icon: LayoutDashboard, path: '/compras', section: 'Compras' },
   { key: 'Proveedores', label: 'Proveedores', icon: Factory, path: '/proveedores' },
-  { key: 'ProductosCompra', label: 'Productos Compra', icon: ShoppingCart, path: '/productos-compra' },
+  // ProductosCompra eliminado — unificado en Productos
   { key: 'Locales', label: 'Locales', icon: Store, path: '/locales' },
-  { key: 'Stock', label: 'Gestión de Stock', icon: BoxesIcon, path: '/stock' },
+  { key: 'Stock', label: 'GestiÃ³n de Stock', icon: BoxesIcon, path: '/stock' },
   { key: 'Pedidos', label: 'Pedidos', icon: FileText, path: '/compras/pedidos' },
   { key: 'Recepciones', label: 'Recepciones', icon: PackageCheck, path: '/compras/recepciones' },
   { key: 'Incidencias', label: 'Incidencias', icon: AlertTriangle, path: '/compras/incidencias' },
-  { key: 'Configuracion', label: 'Configuración', icon: Settings, path: '/configuracion', section: 'Sistema' },
+  { key: 'Configuracion', label: 'ConfiguraciÃ³n', icon: Settings, path: '/configuracion', section: 'Sistema' },
 ]
 
 export default function Layout() {
@@ -79,11 +79,11 @@ export default function Layout() {
       {/* Banner offline / cola pendiente */}
       {(!online || pendientes > 0) && (
         <div className={`fixed top-0 left-0 right-0 z-[60] py-1.5 text-center text-xs font-medium flex items-center justify-center gap-2 ${!online ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'}`}>
-          {!online && <><CloudOff size={14} /> Sin conexión — los cambios se guardan en este dispositivo</>}
+          {!online && <><CloudOff size={14} /> Sin conexiÃ³n â los cambios se guardan en este dispositivo</>}
           {online && pendientes > 0 && (
             <>
               <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
-              {sincronizando ? 'Sincronizando…' : `${pendientes} cambio${pendientes === 1 ? '' : 's'} pendientes`}
+              {sincronizando ? 'Sincronizandoâ¦' : `${pendientes} cambio${pendientes === 1 ? '' : 's'} pendientes`}
               {!sincronizando && (
                 <button onClick={syncManual} className="underline ml-1">Sincronizar ahora</button>
               )}
@@ -116,7 +116,7 @@ export default function Layout() {
           </div>
           {sidebarOpen && (
             <div className="overflow-hidden">
-              <h1 className="font-semibold text-white text-sm leading-tight">{config.app_nombre ?? 'Tío Bigotes'}</h1>
+              <h1 className="font-semibold text-white text-sm leading-tight">{config.app_nombre ?? 'TÃ­o Bigotes'}</h1>
               <p className="text-xs text-white/50">{config.app_subtitulo ?? 'Pro Dashboard'}</p>
             </div>
           )}
@@ -177,7 +177,7 @@ export default function Layout() {
             <button
               onClick={logout}
               className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors shrink-0"
-              title="Cerrar sesión"
+              title="Cerrar sesiÃ³n"
             >
               <LogOut size={16} />
             </button>
