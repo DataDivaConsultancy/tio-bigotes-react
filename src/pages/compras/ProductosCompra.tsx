@@ -36,7 +36,7 @@ const TIPO_IVA_OPTIONS = [
 
 const UNIDADES_OPTIONS = ['unidad', 'kg', 'g', 'l', 'ml', 'caja', 'pack', 'saco', 'garrafa', 'palet', 'bandeja', 'bidon', 'docena']
 
-/* âââ Multi-select dropdown âââ */
+/* ─── Multi-select dropdown ─── */
 function MultiSelect({
   label,
   options,
@@ -219,14 +219,14 @@ export default function ProductosCompra() {
         if (!provName || !filterProveedor.has(provName)) return false
       }
 
-      // DÃ­a pedido filter
+      // Día pedido filter
       if (filterDiaPedido.size > 0) {
         if (!p.dia_pedido) return false
         const dias = p.dia_pedido.split(',').map((d) => d.trim())
         if (!dias.some((d) => filterDiaPedido.has(d))) return false
       }
 
-      // DÃ­a entrega filter
+      // Día entrega filter
       if (filterDiaEntrega.size > 0) {
         if (!p.dia_entrega) return false
         const dias = p.dia_entrega.split(',').map((d) => d.trim())
@@ -269,17 +269,17 @@ export default function ProductosCompra() {
     const rows = toExport.map((p) => ({
       'Nombre': p.nombre,
       'Proveedor': p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? '' : '',
-      'CÃ³digo Proveedor': p.cod_proveedor ?? '',
-      'CÃ³digo Interno': p.cod_interno ?? '',
+      'Código Proveedor': p.cod_proveedor ?? '',
+      'Código Interno': p.cod_interno ?? '',
       'Unidad Medida': p.unidad_medida ?? '',
-      'Compra MÃ­nima': p.unidad_minima_compra ?? '',
+      'Compra Mínima': p.unidad_minima_compra ?? '',
       'Uds por Paquete': p.unidades_por_paquete ?? '',
-      'Precio (â¬)': p.precio ?? '',
+      'Precio (€)': p.precio ?? '',
       'Tipo IVA': p.tipo_iva ?? '',
-      'Stock MÃ­nimo': p.stock_minimo ?? '',
-      'DÃ­a Pedido': p.dia_pedido ?? '',
-      'DÃ­a Entrega': p.dia_entrega ?? '',
-      'Activo': p.activo ? 'SÃ­' : 'No',
+      'Stock Mínimo': p.stock_minimo ?? '',
+      'Día Pedido': p.dia_pedido ?? '',
+      'Día Entrega': p.dia_entrega ?? '',
+      'Activo': p.activo ? 'Sí' : 'No',
     }))
 
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -344,7 +344,7 @@ export default function ProductosCompra() {
           </div>
           <div>
             <h1 className="text-xl font-bold">Productos de compra</h1>
-            <p className="text-sm text-muted-foreground">{filtered.length} productos{selCount > 0 ? ` Â· ${selCount} seleccionados` : ''}</p>
+            <p className="text-sm text-muted-foreground">{filtered.length} productos{selCount > 0 ? ` · ${selCount} seleccionados` : ''}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -362,11 +362,11 @@ export default function ProductosCompra() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Buscar por nombre o cÃ³digo..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar por nombre o código..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <MultiSelect label="Proveedor" options={uniqueProveedores} selected={filterProveedor} onChange={setFilterProveedor} />
-        <MultiSelect label="DÃ­a pedido" options={uniqueDiasPedido} selected={filterDiaPedido} onChange={setFilterDiaPedido} />
-        <MultiSelect label="DÃ­a entrega" options={uniqueDiasEntrega} selected={filterDiaEntrega} onChange={setFilterDiaEntrega} />
+        <MultiSelect label="Día pedido" options={uniqueDiasPedido} selected={filterDiaPedido} onChange={setFilterDiaPedido} />
+        <MultiSelect label="Día entrega" options={uniqueDiasEntrega} selected={filterDiaEntrega} onChange={setFilterDiaEntrega} />
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="rounded" />
           Mostrar inactivos
@@ -396,54 +396,54 @@ export default function ProductosCompra() {
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Proveedor</label>
                 <select value={form.proveedor_id ?? ''} onChange={(e) => setForm({ ...form, proveedor_id: e.target.value ? Number(e.target.value) : null })} className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  <option value="">â Sin proveedor â</option>
+                  <option value="">— Sin proveedor —</option>
                   {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre_comercial}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">CÃ³digo proveedor</label>
+                <label className="text-xs font-medium text-muted-foreground">Código proveedor</label>
                 <Input value={form.cod_proveedor || ''} onChange={(e) => setForm({ ...form, cod_proveedor: e.target.value })} />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">CÃ³digo interno</label>
+                <label className="text-xs font-medium text-muted-foreground">Código interno</label>
                 <Input value={form.cod_interno || ''} onChange={(e) => setForm({ ...form, cod_interno: e.target.value })} />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Unidad de medida</label>
                 <select value={form.unidad_medida ?? ''} onChange={(e) => setForm({ ...form, unidad_medida: e.target.value || null })} className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  <option value="">â</option>
+                  <option value="">—</option>
                   {UNIDADES_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">
-                  Compra mÃ­nima <span className="ml-1 text-[10px] text-muted-foreground/70">(unidades por paquete)</span>
+                  Compra mínima <span className="ml-1 text-[10px] text-muted-foreground/70">(unidades por paquete)</span>
                 </label>
                 <Input type="number" step="any" min={1} value={form.unidades_por_paquete ?? ''} onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null, unidad_minima_compra: e.target.value ? Number(e.target.value) : null })} placeholder="1" />
-                <p className="text-[10px] text-muted-foreground mt-1">Ej: caja de 60 empanadas â 60. Una empanada suelta â 1.</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Ej: caja de 60 empanadas → 60. Una empanada suelta → 1.</p>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Precio (â¬)</label>
+                <label className="text-xs font-medium text-muted-foreground">Precio (€)</label>
                 <Input type="number" step="0.01" min={0} value={form.precio ?? ''} onChange={(e) => setForm({ ...form, precio: e.target.value ? Number(e.target.value) : null })} />
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Tipo IVA</label>
                 <select value={form.tipo_iva ?? ''} onChange={(e) => setForm({ ...form, tipo_iva: e.target.value || null })} className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  <option value="">â Seleccionar â</option>
+                  <option value="">— Seleccionar —</option>
                   {TIPO_IVA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Stock mÃ­nimo</label>
+                <label className="text-xs font-medium text-muted-foreground">Stock mínimo</label>
                 <Input type="number" step="any" min={0} value={form.stock_minimo ?? ''} onChange={(e) => setForm({ ...form, stock_minimo: e.target.value ? Number(e.target.value) : null })} />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">DÃ­a pedido</label>
-                <Input value={form.dia_pedido || ''} onChange={(e) => setForm({ ...form, dia_pedido: e.target.value })} placeholder="Lunes, MiÃ©rcolesâ¦" />
+                <label className="text-xs font-medium text-muted-foreground">Día pedido</label>
+                <Input value={form.dia_pedido || ''} onChange={(e) => setForm({ ...form, dia_pedido: e.target.value })} placeholder="Lunes, Miércoles…" />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">DÃ­a entrega</label>
-                <Input value={form.dia_entrega || ''} onChange={(e) => setForm({ ...form, dia_entrega: e.target.value })} placeholder="Martes, Juevesâ¦" />
+                <label className="text-xs font-medium text-muted-foreground">Día entrega</label>
+                <Input value={form.dia_entrega || ''} onChange={(e) => setForm({ ...form, dia_entrega: e.target.value })} placeholder="Martes, Jueves…" />
               </div>
               {!creating && (
                 <div className="flex items-center gap-2 mt-6">
@@ -454,7 +454,7 @@ export default function ProductosCompra() {
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <Button variant="outline" onClick={cancelEdit} disabled={saving}><X size={16} /> Cancelar</Button>
-              <Button onClick={save} disabled={saving || !form.nombre?.trim()}><Check size={16} /> {saving ? 'Guardandoâ¦' : (creating ? 'Crear' : 'Guardar')}</Button>
+              <Button onClick={save} disabled={saving || !form.nombre?.trim()}><Check size={16} /> {saving ? 'Guardando…' : (creating ? 'Crear' : 'Guardar')}</Button>
             </div>
           </CardContent>
         </Card>
@@ -497,14 +497,14 @@ export default function ProductosCompra() {
                         <div className="font-medium">{p.nombre}</div>
                         {p.cod_proveedor && <div className="text-xs text-muted-foreground">{p.cod_proveedor}</div>}
                       </td>
-                      <td className="px-4 py-2">{p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? 'â' : 'â'}</td>
-                      <td className="px-4 py-2 text-muted-foreground">{p.unidad_medida ?? 'â'}</td>
+                      <td className="px-4 py-2">{p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? '—' : '—'}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{p.unidad_medida ?? '—'}</td>
                       <td className="px-4 py-2 text-right tabular-nums">
-                        {p.precio != null ? Number(p.precio).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }) : 'â'}
+                        {p.precio != null ? Number(p.precio).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }) : '—'}
                       </td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground">{p.tipo_iva ?? 'â'}</td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">{p.tipo_iva ?? '—'}</td>
                       <td className="px-4 py-2 text-right tabular-nums">{p.unidades_por_paquete ?? 1}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{p.stock_minimo ?? 'â'}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{p.stock_minimo ?? '—'}</td>
                       <td className="px-4 py-2">
                         <Button variant="ghost" size="icon" onClick={() => startEdit(p)} disabled={isEditing}><Pencil size={14} /></Button>
                       </td>
@@ -512,7 +512,7 @@ export default function ProductosCompra() {
                   ))}
                   {filtered.length === 0 && (
                     <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
-                      {productos.length === 0 ? 'AÃºn no hay productos. Crea el primero.' : 'No hay productos que coincidan con los filtros.'}
+                      {productos.length === 0 ? 'Aún no hay productos. Crea el primero.' : 'No hay productos que coincidan con los filtros.'}
                     </td></tr>
                   )}
                 </tbody>
@@ -522,7 +522,7 @@ export default function ProductosCompra() {
         </Card>
       )}
 
-      {loading && <div className="text-center text-muted-foreground py-8">Cargandoâ¦</div>}
+      {loading && <div className="text-center text-muted-foreground py-8">Cargando…</div>}
     </div>
   )
 }
