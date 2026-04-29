@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useOnline } from '@/hooks/useOnline'
+import { useColaPendiente } from '@/hooks/useColaPendiente'
+import { procesar as procesarColaOffline } from '@/lib/offline/sync'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -6,6 +9,7 @@ import {
   AlertCircle, Upload, Shield, Factory, ShoppingCart,
   Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
   LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database,
+  WifiOff, RefreshCw, CloudOff, Wifi,
 } from 'lucide-react'
 
 interface NavItem {
@@ -44,6 +48,22 @@ export default function Layout() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const online = useOnline()
+  const pendientes = useColaPendiente()
+  const [sincronizando, setSincronizando] = useState(false)
+
+  async function syncManual() {
+    setSincronizando(true)
+    try { await procesarColaOffline() } finally { setSincronizando(false) }
+  }
+
+  useEffect(() => {
+    if (online && pendientes > 0 && !sincronizando) {
+      // Auto-disparo cuando vuelve online y hay cola
+      syncManual()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
 
   const visibleItems = navItems.filter(
     (item) => item.key === 'Home' || isSuperadmin || hasAccess(item.key)
@@ -53,6 +73,21 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* Banner offline / cola pendiente */}
+      {(!online || pendientes > 0) && (
+        <div className={`fixed top-0 left-0 right-0 z-[60] py-1.5 text-center text-xs font-medium flex items-center justify-center gap-2 ${!online ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'}`}>
+          {!online && <><CloudOff size={14} /> Sin conexión — los cambios se guardan en este dispositivo</>}
+          {online && pendientes > 0 && (
+            <>
+              <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
+              {sincronizando ? 'Sincronizando…' : `${pendientes} cambio${pendientes === 1 ? '' : 's'} pendientes`}
+              {!sincronizando && (
+                <button onClick={syncManual} className="underline ml-1">Sincronizar ahora</button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {/* Mobile overlay */}
       {mobileOpen && (
         <div

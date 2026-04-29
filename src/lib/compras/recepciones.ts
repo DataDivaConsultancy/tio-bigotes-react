@@ -43,6 +43,12 @@ export async function actualizarLineaRecepcion(params: {
   p_foto_url?: string | null
   p_notas?: string | null
 }) {
+  // Si offline, encolar la operación y devolver ok local
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    const { encolarRpc } = await import('@/lib/offline/sync')
+    await encolarRpc('rpc_actualizar_linea_recepcion', params, `linea:${params.p_linea_id}`)
+    return { ok: true, data: { offline: true } } as any
+  }
   return rpcCall('rpc_actualizar_linea_recepcion', params)
 }
 
