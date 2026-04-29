@@ -52,22 +52,23 @@ export default function Empleados() {
 
   /* ---------- Load roles from roles_v2 ---------- */
   async function loadRoles() {
+    // La vista roles_v2 ahora expone la columna 'nombre' (no 'rol')
     const { data, error } = await supabase
       .from('roles_v2')
-      .select('rol')
-      .order('rol')
-    if (data && data.length > 0) {
-      const roles = data.map((r: any) => r.rol)
-      roles.sort((a: string, b: string) => {
+      .select('nombre, activo')
+      .eq('activo', true)
+      .order('nombre')
+    if (!error && data && data.length > 0) {
+      const roles = data.map((r: any) => r.nombre as string)
+      roles.sort((a, b) => {
         if (a === 'superadmin') return -1
         if (b === 'superadmin') return 1
         return a.localeCompare(b)
       })
       setRolOptions(roles)
     } else {
-      const { data: empData } = await supabase
-        .from('empleados_v2')
-        .select('rol')
+      // Fallback: listar roles distintos asignados a empleados
+      const { data: empData } = await supabase.from('empleados_v2').select('rol')
       if (empData) {
         const unique = [...new Set(empData.map((e: any) => e.rol).filter(Boolean))]
         unique.sort()
