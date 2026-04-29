@@ -9,6 +9,7 @@ interface ProductoCompra {
   id: number
   nombre: string
   proveedor_id: number | null
+  producto_venta_id: number | null
   cod_proveedor: string | null
   cod_interno: string | null
   precio: number | null
@@ -93,12 +94,7 @@ function MultiSelect({
           </label>
           {options.map((opt) => (
             <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-sm">
-              <input
-                type="checkbox"
-                checked={allSelected || selected.has(opt)}
-                onChange={() => toggle(opt)}
-                className="rounded"
-              />
+              <input type="checkbox" checked={allSelected || selected.has(opt)} onChange={() => toggle(opt)} className="rounded" />
               {opt}
             </label>
           ))}
@@ -111,6 +107,7 @@ function MultiSelect({
 export default function ProductosCompra() {
   const [productos, setProductos] = useState<ProductoCompra[]>([])
   const [proveedores, setProveedores] = useState<ProveedorOption[]>([])
+  const [categoriaMap, setCategoriaMap] = useState<Map<number, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showInactive, setShowInactive] = useState(false)
@@ -118,6 +115,7 @@ export default function ProductosCompra() {
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
   const [form, setForm] = useState<Partial<ProductoCompra>>({})
 
   // Selection
@@ -131,6 +129,7 @@ export default function ProductosCompra() {
   useEffect(() => {
     loadProductos()
     loadProveedores()
+    loadCategorias()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showInactive])
 
@@ -144,13 +143,27 @@ export default function ProductosCompra() {
     if (data) setProveedores(data)
   }
 
+  async function loadCategorias() {
+    const { data, error } = await supabase
+      .from('vw_productos_dim')
+      .select('id, categoria')
+    if (error) { console.error('loadCategorias:', error); return }
+    if (data) {
+      const map = new Map<number, string>()
+      data.forEach((d: any) => { if (d.categoria) map.set(d.id, d.categoria) })
+      setCategoriaMap(map)
+    }
+  }
+
   async function loadProductos() {
     setLoading(true)
     let query = supabase
       .from('productos_compra_v2')
-      .select('id, nombre, proveedor_id, cod_proveedor, cod_interno, precio, tipo_iva, unidad_medida, unidad_minima_compra, unidades_por_paquete, stock_minimo, dia_pedido, dia_entrega, activo')
+      .select('id, nombre, proveedor_id, producto_venta_id, cod_proveedor, cod_interno, precio, tipo_iva, unidad_medida, unidad_minima_compra, unidades_por_paquete, stock_minimo, dia_pedido, dia_entrega, activo')
       .order('nombre')
+
     if (!showInactive) query = query.eq('activo', true)
+
     const { data, error } = await query
     if (error) {
       console.error('loadProductos:', error)
@@ -218,21 +231,18 @@ export default function ProductosCompra() {
         const provName = p.proveedor_id ? proveedorMap.get(p.proveedor_id) : null
         if (!provName || !filterProveedor.has(provName)) return false
       }
-
       // Día pedido filter
       if (filterDiaPedido.size > 0) {
         if (!p.dia_pedido) return false
         const dias = p.dia_pedido.split(',').map((d) => d.trim())
         if (!dias.some((d) => filterDiaPedido.has(d))) return false
       }
-
       // Día entrega filter
       if (filterDiaEntrega.size > 0) {
         if (!p.dia_entrega) return false
         const dias = p.dia_entrega.split(',').map((d) => d.trim())
         if (!dias.some((d) => filterDiaEntrega.has(d))) return false
       }
-
       return true
     })
   }, [productos, search, filterProveedor, filterDiaPedido, filterDiaEntrega, proveedorMap])
@@ -268,6 +278,7 @@ export default function ProductosCompra() {
 
     const rows = toExport.map((p) => ({
       'Nombre': p.nombre,
+      'Categoría': p.producto_venta_id ? categoriaMap.get(p.producto_venta_id) ?? '' : '',
       'Proveedor': p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? '' : '',
       'Código Proveedor': p.cod_proveedor ?? '',
       'Código Interno': p.cod_interno ?? '',
@@ -283,7 +294,6 @@ export default function ProductosCompra() {
     }))
 
     const ws = XLSX.utils.json_to_sheet(rows)
-
     // Auto-width columns
     const colWidths = Object.keys(rows[0]).map((key) => {
       const maxLen = Math.max(key.length, ...rows.map((r) => String((r as any)[key]).length))
@@ -305,6 +315,7 @@ export default function ProductosCompra() {
     if (!form.nombre?.trim()) return
     setSaving(true)
     setErrorMsg(null)
+
     const payload = {
       p_nombre: form.nombre,
       p_proveedor_id: form.proveedor_id ?? null,
@@ -319,12 +330,14 @@ export default function ProductosCompra() {
       p_tipo_iva: form.tipo_iva ?? null,
       p_stock_minimo: form.stock_minimo ?? 0,
     }
+
     let result
     if (creating) {
       result = await rpcCall('rpc_crear_producto_compra', payload)
     } else if (editing) {
       result = await rpcCall('rpc_actualizar_producto_compra', { p_id: editing.id, ...payload, p_activo: form.activo })
     } else { setSaving(false); return }
+
     if (!result.ok) { setErrorMsg(result.error || 'Error al guardar el producto'); setSaving(false); return }
     setSaving(false)
     cancelEdit()
@@ -349,8 +362,7 @@ export default function ProductosCompra() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={downloadExcel} disabled={filtered.length === 0}>
-            <Download size={16} />
-            Descargar Excel{selCount > 0 ? ` (${selCount})` : ''}
+            <Download size={16} /> Descargar Excel{selCount > 0 ? ` (${selCount})` : ''}
           </Button>
           <Button onClick={startCreate} disabled={isEditing}>
             <Plus size={16} /> Nuevo producto
@@ -362,7 +374,12 @@ export default function ProductosCompra() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Buscar por nombre o código..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <Input
+            placeholder="Buscar por nombre o código..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
         </div>
         <MultiSelect label="Proveedor" options={uniqueProveedores} selected={filterProveedor} onChange={setFilterProveedor} />
         <MultiSelect label="Día pedido" options={uniqueDiasPedido} selected={filterDiaPedido} onChange={setFilterDiaPedido} />
@@ -395,7 +412,10 @@ export default function ProductosCompra() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Proveedor</label>
-                <select value={form.proveedor_id ?? ''} onChange={(e) => setForm({ ...form, proveedor_id: e.target.value ? Number(e.target.value) : null })} className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
+                <select
+                  value={form.proveedor_id ?? ''}
+                  onChange={(e) => setForm({ ...form, proveedor_id: e.target.value ? Number(e.target.value) : null })}
+                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
                   <option value="">— Sin proveedor —</option>
                   {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre_comercial}</option>)}
                 </select>
@@ -410,7 +430,10 @@ export default function ProductosCompra() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Unidad de medida</label>
-                <select value={form.unidad_medida ?? ''} onChange={(e) => setForm({ ...form, unidad_medida: e.target.value || null })} className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
+                <select
+                  value={form.unidad_medida ?? ''}
+                  onChange={(e) => setForm({ ...form, unidad_medida: e.target.value || null })}
+                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
                   <option value="">—</option>
                   {UNIDADES_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
                 </select>
@@ -419,7 +442,12 @@ export default function ProductosCompra() {
                 <label className="text-xs font-medium text-muted-foreground">
                   Compra mínima <span className="ml-1 text-[10px] text-muted-foreground/70">(unidades por paquete)</span>
                 </label>
-                <Input type="number" step="any" min={1} value={form.unidades_por_paquete ?? ''} onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null, unidad_minima_compra: e.target.value ? Number(e.target.value) : null })} placeholder="1" />
+                <Input
+                  type="number" step="any" min={1}
+                  value={form.unidades_por_paquete ?? ''}
+                  onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null, unidad_minima_compra: e.target.value ? Number(e.target.value) : null })}
+                  placeholder="1"
+                />
                 <p className="text-[10px] text-muted-foreground mt-1">Ej: caja de 60 empanadas → 60. Una empanada suelta → 1.</p>
               </div>
               <div>
@@ -428,7 +456,10 @@ export default function ProductosCompra() {
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Tipo IVA</label>
-                <select value={form.tipo_iva ?? ''} onChange={(e) => setForm({ ...form, tipo_iva: e.target.value || null })} className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
+                <select
+                  value={form.tipo_iva ?? ''}
+                  onChange={(e) => setForm({ ...form, tipo_iva: e.target.value || null })}
+                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
                   <option value="">— Seleccionar —</option>
                   {TIPO_IVA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -478,6 +509,7 @@ export default function ProductosCompra() {
                       />
                     </th>
                     <th className="px-4 py-3 font-semibold">Nombre</th>
+                    <th className="px-4 py-3 font-semibold">Categoría</th>
                     <th className="px-4 py-3 font-semibold">Proveedor</th>
                     <th className="px-4 py-3 font-semibold">Unidad</th>
                     <th className="px-4 py-3 font-semibold text-right">Precio</th>
@@ -497,6 +529,11 @@ export default function ProductosCompra() {
                         <div className="font-medium">{p.nombre}</div>
                         {p.cod_proveedor && <div className="text-xs text-muted-foreground">{p.cod_proveedor}</div>}
                       </td>
+                      <td className="px-4 py-2">
+                        {p.producto_venta_id && categoriaMap.get(p.producto_venta_id)
+                          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">{categoriaMap.get(p.producto_venta_id)}</span>
+                          : <span className="text-muted-foreground">—</span>}
+                      </td>
                       <td className="px-4 py-2">{p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? '—' : '—'}</td>
                       <td className="px-4 py-2 text-muted-foreground">{p.unidad_medida ?? '—'}</td>
                       <td className="px-4 py-2 text-right tabular-nums">
@@ -511,7 +548,7 @@ export default function ProductosCompra() {
                     </tr>
                   ))}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                    <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
                       {productos.length === 0 ? 'Aún no hay productos. Crea el primero.' : 'No hay productos que coincidan con los filtros.'}
                     </td></tr>
                   )}
