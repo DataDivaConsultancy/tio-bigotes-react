@@ -146,6 +146,12 @@ export default function Empleados() {
 
   async function save() {
     if (!form.nombre.trim() || !form.apellido.trim() || !form.email.trim()) return
+    // Validación básica de formato email
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRe.test(form.email.trim())) {
+      alert('El email no tiene un formato válido. Comprueba que no haya errores tipográficos.')
+      return
+    }
     setSaving(true)
     const fullName = `${form.nombre.trim()} ${form.apellido.trim()}`
 
@@ -168,6 +174,16 @@ export default function Empleados() {
         .single()
       if (error || !inserted) {
         alert(error?.message || 'Error al crear empleado')
+        setSaving(false)
+        return
+      }
+      // Confirmación explícita del email destino para evitar typos
+      const okSend = confirm(
+        `Se va a crear el empleado y enviar la contraseña temporal a:\n\n  ${form.email.trim()}\n\n¿El email es correcto?`,
+      )
+      if (!okSend) {
+        // Borrar el empleado recién creado y abortar
+        await supabase.from('empleados_v2').delete().eq('id', inserted.id)
         setSaving(false)
         return
       }
@@ -424,16 +440,6 @@ export default function Empleados() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${ROL_COLORS[emp.rol] || 'bg-gray-50 text-gray-700'}`}>
                         {emp.rol}
                       </span>
-                    </td>
-                    <td className="py-3 px-4 hidden lg:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {(emp.permisos || []).slice(0, 3).map(p => (
-                          <span key={p} className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{p}</span>
-                        ))}
-                        {(emp.permisos || []).length > 3 && (
-                          <span className="text-xs text-muted-foreground">+{emp.permisos.length - 3}</span>
-                        )}
-                      </div>
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
                       {emp.activo ? (
