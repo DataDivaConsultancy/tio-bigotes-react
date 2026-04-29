@@ -27,7 +27,17 @@ export default function Login() {
     setLoading(false)
 
     if (result.ok) {
-      navigate('/')
+      // Si el usuario debe cambiar la contraseña, redirigir
+      try {
+        const u = JSON.parse(localStorage.getItem('tb_user') || 'null')
+        if (u?.must_change_password) {
+          navigate('/cambiar-password')
+        } else {
+          navigate('/')
+        }
+      } catch {
+        navigate('/')
+      }
     } else {
       setError(result.error || 'Error al iniciar sesión')
     }

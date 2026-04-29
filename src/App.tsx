@@ -7,6 +7,8 @@ import ResetPassword from '@/pages/ResetPassword'
 import Home from '@/pages/Home'
 import Productos from '@/pages/Productos'
 import Empleados from '@/pages/Empleados'
+import RolesPage from '@/pages/Roles'
+import CambiarPassword from '@/pages/CambiarPassword'
 import Operativa from '@/pages/Operativa'
 import BI from '@/pages/BI'
 import Forecast from '@/pages/Forecast'
@@ -40,6 +42,7 @@ function AppRoutes() {
       {/* Public */}
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/cambiar-password" element={<CambiarPassword />} />
 
       {/* Protected */}
       <Route
@@ -65,6 +68,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="Empleados">
               <Empleados />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/roles"
+          element={
+            <ProtectedRoute screen="Roles">
+              <RolesPage />
             </ProtectedRoute>
           }
         />

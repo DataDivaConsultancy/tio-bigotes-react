@@ -1,267 +1,294 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useMemo, useState } from 'react'
+import { supabase, rpcCall } from '@/lib/supabase'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus, Pencil, Check, X, KeyRound, Trash2, Search, Lock } from 'lucide-react'
 
-const ALL_SCREENS = [
-  'Productos',
-  'Empleados',
-  'Roles',
-  'Operativa',
-  'BI',
-  'Forecast',
-  'Pendientes',
-  'CargaVentas',
-  'Auditoria',
-  'Proveedores',
-  'ProductosCompra',
-  'Locales',
-  'Stock',
-];
+// Catálogo de pantallas (debe coincidir con los `screen` usados en App.tsx)
+const ALL_SCREENS: { key: string; label: string; group: string }[] = [
+  { key: 'ComprasDashboard', label: 'Dashboard Compras', group: 'Compras' },
+  { key: 'Pedidos', label: 'Pedidos', group: 'Compras' },
+  { key: 'Recepciones', label: 'Recepciones', group: 'Compras' },
+  { key: 'Incidencias', label: 'Incidencias', group: 'Compras' },
+  { key: 'Albaranes', label: 'Albaranes (Fase 2)', group: 'Compras' },
+  { key: 'FacturasCompra', label: 'Facturas (Fase 2)', group: 'Compras' },
+  { key: 'Proveedores', label: 'Proveedores', group: 'Maestros' },
+  { key: 'ProductosCompra', label: 'Productos Compra', group: 'Maestros' },
+  { key: 'Locales', label: 'Locales', group: 'Maestros' },
+  { key: 'Stock', label: 'Stock', group: 'Maestros' },
+  { key: 'Productos', label: 'Productos', group: 'Maestros' },
+  { key: 'Empleados', label: 'Empleados', group: 'Administración' },
+  { key: 'Roles', label: 'Roles y permisos', group: 'Administración' },
+  { key: 'Auditoria', label: 'Auditoría', group: 'Administración' },
+  { key: 'CargaVentas', label: 'Subir CSV Ventas', group: 'Datos' },
+  { key: 'CargaProductos', label: 'Subir CSV Productos', group: 'Datos' },
+  { key: 'BI', label: 'Historial / BI', group: 'Operaciones' },
+  { key: 'Forecast', label: 'Forecast', group: 'Operaciones' },
+  { key: 'Operativa', label: 'Control Diario', group: 'Operaciones' },
+  { key: 'Pendientes', label: 'Pendientes', group: 'Operaciones' },
+]
 
-const SCREEN_LABELS: Record<string, string> = {
-  Productos: 'Productos',
-  Empleados: 'Empleados',
-  Roles: 'Roles',
-  Operativa: 'Control Diario',
-  BI: 'Historial / BI',
-  Forecast: 'Forecast',
-  Pendientes: 'Pendientes',
-  CargaVentas: 'Subir CSV Ventas',
-  Auditoria: 'Auditoría',
-  Proveedores: 'Proveedores',
-  ProductosCompra: 'Productos Compra',
-  Locales: 'Locales',
-  Stock: 'Gestión de Stock',
-};
-
-interface RolePerms {
-  rol: string;
-  permisos: string[];
-  isNew?: boolean;
+interface Rol {
+  id: string
+  nombre: string
+  descripcion: string | null
+  permisos: string[]
+  es_sistema: boolean
+  activo: boolean
+  created_at: string
+  updated_at: string
 }
 
 export default function Roles() {
-  const [roles, setRoles] = useState<RolePerms[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [newRoleName, setNewRoleName] = useState('');
-  const [showNewRol, setShowNewRol] = useState(false);
+  const [roles, setRoles] = useState<Rol[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Rol | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [search, setSearch] = useState('')
+  const [form, setForm] = useState<{ nombre: string; descripcion: string; permisos: Set<string> }>({
+    nombre: '', descripcion: '', permisos: new Set(),
+  })
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    fetchRoles();
-  }, []);
+  async function cargar() {
+    setLoading(true); setError(null)
+    const { data, error: e } = await supabase.from('roles_v2')
+      .select('id, nombre, descripcion, permisos, es_sistema, activo, created_at, updated_at')
+      .order('es_sistema', { ascending: false })
+      .order('nombre')
+    if (e) setError(e.message)
+    else setRoles((data ?? []).map((r: any) => ({ ...r, permisos: r.permisos ?? [] })) as Rol[])
+    setLoading(false)
+  }
+  useEffect(() => { cargar() }, [])
 
-  async function fetchRoles() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('roles_v2')
-      .select('rol, permisos');
+  function startCreate() {
+    setCreating(true); setEditing(null); setError(null)
+    setForm({ nombre: '', descripcion: '', permisos: new Set() })
+  }
+  function startEdit(r: Rol) {
+    setEditing(r); setCreating(false); setError(null)
+    setForm({
+      nombre: r.nombre,
+      descripcion: r.descripcion ?? '',
+      permisos: new Set(r.permisos ?? []),
+    })
+  }
+  function cancelEdit() {
+    setEditing(null); setCreating(false); setError(null)
+    setForm({ nombre: '', descripcion: '', permisos: new Set() })
+  }
 
-    if (error) {
-      console.error('Error fetching roles:', error);
-      const { data: empData } = await supabase
-        .from('empleados_v2')
-        .select('rol, permisos');
-      if (empData) {
-        const rolMap = new Map<string, string[]>();
-        empData.forEach((emp: any) => {
-          if (emp.rol && !rolMap.has(emp.rol)) {
-            rolMap.set(emp.rol, emp.permisos || []);
-          }
-        });
-        const rolesArr: RolePerms[] = [];
-        rolMap.forEach((permisos, rol) => {
-          rolesArr.push({ rol, permisos: [...permisos] });
-        });
-        rolesArr.sort((a, b) => {
-          if (a.rol === 'superadmin') return -1;
-          if (b.rol === 'superadmin') return 1;
-          return a.rol.localeCompare(b.rol);
-        });
-        setRoles(rolesArr);
-      }
-      setLoading(false);
-      return;
+  function togglePerm(key: string) {
+    setForm((prev) => {
+      const next = new Set(prev.permisos)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return { ...prev, permisos: next }
+    })
+  }
+  function toggleGroup(group: string) {
+    const groupScreens = ALL_SCREENS.filter((s) => s.group === group).map((s) => s.key)
+    setForm((prev) => {
+      const next = new Set(prev.permisos)
+      const todos = groupScreens.every((s) => next.has(s))
+      if (todos) groupScreens.forEach((s) => next.delete(s))
+      else groupScreens.forEach((s) => next.add(s))
+      return { ...prev, permisos: next }
+    })
+  }
+
+  async function guardar() {
+    if (!form.nombre.trim()) { setError('Falta el nombre'); return }
+    setSaving(true); setError(null)
+
+    const permisosArr = Array.from(form.permisos)
+    let r
+    if (creating) {
+      r = await rpcCall<{ id: string }>('rpc_crear_rol', {
+        p_nombre: form.nombre, p_descripcion: form.descripcion || null, p_permisos: permisosArr,
+      })
+    } else if (editing) {
+      r = await rpcCall('rpc_actualizar_rol', {
+        p_id: editing.id, p_nombre: form.nombre, p_descripcion: form.descripcion || null,
+        p_permisos: permisosArr,
+      })
+    } else { setSaving(false); return }
+    setSaving(false)
+    if (!r.ok) { setError(r.error === 'ya_existe' ? 'Ya existe un rol con ese nombre' : (r.error || 'Error')); return }
+    cancelEdit(); cargar()
+  }
+
+  async function eliminar(r: Rol) {
+    if (r.es_sistema) return
+    if (!confirm(`¿Eliminar el rol "${r.nombre}"? Solo se puede si no hay empleados activos con ese rol.`)) return
+    const res = await rpcCall('rpc_eliminar_rol', { p_id: r.id })
+    if (!res.ok) {
+      alert(res.error === 'rol_en_uso' ? 'No se puede eliminar: hay empleados activos con este rol.' : (res.error || 'Error'))
+      return
     }
-
-    const rolesArr: RolePerms[] = (data || []).map((r: any) => ({
-      rol: r.rol,
-      permisos: Array.isArray(r.permisos) ? [...r.permisos] : [],
-    }));
-
-    rolesArr.sort((a, b) => {
-      if (a.rol === 'superadmin') return -1;
-      if (b.rol === 'superadmin') return 1;
-      return a.rol.localeCompare(b.rol);
-    });
-
-    setRoles(rolesArr);
-    setLoading(false);
+    cargar()
   }
 
-  function togglePermiso(rolIdx: number, screen: string) {
-    setRoles((prev) => {
-      const updated = [...prev];
-      const role = { ...updated[rolIdx] };
-      const perms = [...role.permisos];
-      const idx = perms.indexOf(screen);
-      if (idx >= 0) perms.splice(idx, 1);
-      else perms.push(screen);
-      role.permisos = perms;
-      updated[rolIdx] = role;
-      return updated;
-    });
-  }
+  const filtered = roles.filter((r) => r.nombre.toLowerCase().includes(search.toLowerCase()))
+  const isEditing = creating || editing !== null
 
-  function toggleAll(rolIdx: number) {
-    setRoles((prev) => {
-      const updated = [...prev];
-      const role = { ...updated[rolIdx] };
-      role.permisos = role.permisos.length === ALL_SCREENS.length ? [] : [...ALL_SCREENS];
-      updated[rolIdx] = role;
-      return updated;
-    });
-  }
-
-  function addNewRol() {
-    const name = newRoleName.trim().toLowerCase();
-    if (!name) return;
-    if (roles.some((r) => r.rol === name)) {
-      setMsg('Ya existe un rol con ese nombre');
-      setTimeout(() => setMsg(''), 3000);
-      return;
+  const screensByGroup = useMemo(() => {
+    const m = new Map<string, typeof ALL_SCREENS>()
+    for (const s of ALL_SCREENS) {
+      const g = m.get(s.group) ?? []
+      g.push(s); m.set(s.group, g)
     }
-    setRoles((prev) => [...prev, { rol: name, permisos: [], isNew: true }]);
-    setNewRoleName('');
-    setShowNewRol(false);
-  }
-
-  function removeNewRol(rolIdx: number) {
-    setRoles((prev) => prev.filter((_, i) => i !== rolIdx));
-  }
-
-  async function saveAll() {
-    setSaving(true);
-    setMsg('');
-    try {
-      for (const role of roles) {
-        const { error: roleError } = await supabase
-          .from('roles_v2')
-          .insert({ rol: role.rol, permisos: role.permisos });
-        if (roleError) console.error('Error saving role to roles_v2:', roleError);
-
-        const { error } = await supabase
-          .from('empleados_v2')
-          .update({ permisos: role.permisos })
-          .eq('rol', role.rol);
-        if (error && !role.isNew) throw error;
-      }
-      setMsg('Permisos guardados correctamente');
-      setRoles((prev) => prev.map((r) => ({ ...r, isNew: false })));
-    } catch (err: any) {
-      setMsg('Error al guardar: ' + (err.message || err));
-    }
-    setSaving(false);
-    setTimeout(() => setMsg(''), 4000);
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black" />
-      </div>
-    );
-  }
+    return Array.from(m.entries())
+  }, [])
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Roles y Permisos</h1>
-        <div className="flex gap-2">
-          {!showNewRol && (
-            <button
-              onClick={() => setShowNewRol(true)}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
-            >
-              + Nuevo rol
-            </button>
-          )}
-          <button
-            onClick={saveAll}
-            disabled={saving}
-            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 text-sm font-medium"
-          >
-            {saving ? 'Guardando...' : 'Guardar cambios'}
-          </button>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-500 flex items-center justify-center"><KeyRound size={20} className="text-white" /></div>
+          <div>
+            <h1 className="text-xl font-bold">Roles y permisos</h1>
+            <p className="text-sm text-muted-foreground">{filtered.length} roles</p>
+          </div>
         </div>
+        <Button onClick={startCreate} disabled={isEditing}><Plus size={16} /> Nuevo rol</Button>
       </div>
 
-      {msg && (
-        <div className={`p-3 rounded-lg text-sm ${msg.includes('Error') || msg.includes('existe') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-          {msg}
-        </div>
-      )}
+      <div className="relative max-w-sm">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input placeholder="Buscar rol..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      </div>
 
-      {showNewRol && (
-        <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-          <input type="text" placeholder="Nombre del nuevo rol" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addNewRol()} className="border border-gray-300 rounded px-3 py-1.5 text-sm flex-1" autoFocus />
-          <button onClick={addNewRol} className="px-3 py-1.5 bg-black text-white rounded text-sm hover:bg-gray-800">Añadir</button>
-          <button onClick={() => { setShowNewRol(false); setNewRoleName(''); }} className="px-3 py-1.5 bg-gray-200 text-gray-600 rounded text-sm hover:bg-gray-300">Cancelar</button>
-        </div>
-      )}
+      {error && <Card className="border-red-200 bg-red-50"><CardContent className="py-3 text-sm text-red-700">{error}</CardContent></Card>}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-4 py-3 font-semibold text-gray-600 sticky left-0 bg-gray-50 min-w-[140px]">Rol</th>
-              {ALL_SCREENS.map((screen) => (
-                <th key={screen} className="px-3 py-3 font-medium text-gray-600 text-center min-w-[90px]">
-                  <span className="text-xs leading-tight block">{SCREEN_LABELS[screen] || screen}</span>
-                </th>
-              ))}
-              <th className="px-3 py-3 font-medium text-gray-600 text-center min-w-[70px]"><span className="text-xs">Todos</span></th>
-              <th className="px-3 py-3 w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {roles.map((role, ridx) => (
-              <tr key={role.rol} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-900 sticky left-0 bg-white">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-block w-2 h-2 rounded-full ${role.rol === 'superadmin' ? 'bg-amber-500' : 'bg-blue-500'}`} />
-                    {role.rol}
-                  </div>
-                </td>
-                {ALL_SCREENS.map((screen) => (
-                  <td key={screen} className="px-3 py-3 text-center">
-                    <label className="inline-flex items-center cursor-pointer">
-                      <input type="checkbox" checked={role.permisos.includes(screen)} onChange={() => togglePermiso(ridx, screen)} className="sr-only peer" />
-                      <div className={`w-9 h-5 rounded-full transition-colors ${role.permisos.includes(screen) ? 'bg-black' : 'bg-gray-200'} relative`}>
-                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${role.permisos.includes(screen) ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      {/* Form crear/editar */}
+      {isEditing && (
+        <Card className="border-primary/30 shadow-md">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              {creating ? 'Nuevo rol' : `Editando: ${editing?.nombre}`}
+              {editing?.es_sistema && <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full"><Lock size={10} /> Rol del sistema</span>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
+                <Input
+                  value={form.nombre}
+                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                  disabled={editing?.es_sistema}
+                  placeholder="ej: encargado_tienda"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Descripción</label>
+                <Input value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} placeholder="Para qué sirve este rol" />
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-2 flex items-center justify-between">
+                <span>Funcionalidades a las que tiene acceso ({form.permisos.size})</span>
+                <span className="text-xs font-normal text-muted-foreground">Click en grupo para alternar todo</span>
+              </h3>
+              <div className="space-y-3">
+                {screensByGroup.map(([group, screens]) => {
+                  const todos = screens.every((s) => form.permisos.has(s.key))
+                  const algunos = screens.some((s) => form.permisos.has(s.key))
+                  return (
+                    <div key={group} className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(group)}
+                          className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${todos ? 'bg-violet-500 text-white' : algunos ? 'bg-violet-100 text-violet-700' : 'text-muted-foreground hover:bg-muted'}`}
+                        >
+                          {group}
+                        </button>
+                        <span className="text-[10px] text-muted-foreground">{screens.filter((s) => form.permisos.has(s.key)).length} / {screens.length}</span>
                       </div>
-                    </label>
-                  </td>
-                ))}
-                <td className="px-3 py-3 text-center">
-                  <button onClick={() => toggleAll(ridx)} className={`px-2 py-1 rounded text-xs font-medium ${role.permisos.length === ALL_SCREENS.length ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                    {role.permisos.length === ALL_SCREENS.length ? 'Quitar' : 'Todos'}
-                  </button>
-                </td>
-                <td className="px-3 py-3 text-center">
-                  {role.isNew && (
-                    <button onClick={() => removeNewRol(ridx)} className="text-red-400 hover:text-red-600 text-lg" title="Eliminar rol">×</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {screens.map((s) => {
+                          const sel = form.permisos.has(s.key)
+                          return (
+                            <button
+                              key={s.key}
+                              type="button"
+                              onClick={() => togglePerm(s.key)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                sel
+                                  ? 'bg-violet-500 text-white border-violet-500'
+                                  : 'bg-background text-muted-foreground border-border hover:border-violet-400'
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
 
-      <p className="text-xs text-gray-400">
-        Los cambios en permisos se aplican a todos los empleados con el rol seleccionado. Los empleados nuevos heredarán los permisos del rol asignado.
-      </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={cancelEdit} disabled={saving}><X size={16} /> Cancelar</Button>
+              <Button onClick={guardar} disabled={saving || !form.nombre.trim()}>
+                <Check size={16} /> {saving ? 'Guardando…' : (creating ? 'Crear rol' : 'Guardar')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tabla de roles */}
+      {!loading && (
+        <Card>
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b">
+                <tr className="text-left">
+                  <th className="px-4 py-3 font-semibold">Nombre</th>
+                  <th className="px-4 py-3 font-semibold">Descripción</th>
+                  <th className="px-4 py-3 font-semibold text-right">Funcionalidades</th>
+                  <th className="px-4 py-3 font-semibold w-24"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id} className={`border-b last:border-0 hover:bg-muted/30 ${!r.activo ? 'opacity-60' : ''}`}>
+                    <td className="px-4 py-2">
+                      <div className="font-medium flex items-center gap-2">
+                        {r.nombre}
+                        {r.es_sistema && <Lock size={11} className="text-amber-600" />}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs">{r.descripcion ?? '—'}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{r.permisos.length}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => startEdit(r)} disabled={isEditing}><Pencil size={14} /></Button>
+                        {!r.es_sistema && (
+                          <Button variant="ghost" size="icon" onClick={() => eliminar(r)} disabled={isEditing} className="text-red-600"><Trash2 size={14} /></Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">Sin roles. Crea el primero.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {loading && <div className="text-center text-muted-foreground py-8">Cargando…</div>}
     </div>
-  );
+  )
 }

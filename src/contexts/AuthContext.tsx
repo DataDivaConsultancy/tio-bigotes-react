@@ -43,21 +43,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const hashed = await hashPassword(password)
+    const emailNorm = email.toLowerCase().trim()
 
-    const { data, error } = await supabase
+    // 1. Validar credencial en empleados_v2
+    const { data: cred, error } = await supabase
       .from('empleados_v2')
-      .select('id,nombre,email,telefono,rol,activo,permisos,password_hash,must_change_password')
-      .eq('email', email.toLowerCase().trim())
+      .select('id, password_hash')
+      .eq('email', emailNorm)
       .eq('activo', true)
       .limit(1)
-      .single()
+      .maybeSingle()
 
-    if (error || !data) {
+    if (error || !cred) {
       return { ok: false, error: 'Email no encontrado o usuario inactivo' }
     }
-
-    if (data.password_hash !== hashed) {
+    if (cred.password_hash !== hashed) {
       return { ok: false, error: 'Contraseña incorrecta' }
+    }
+
+    // 2. Cargar datos completos + permisos efectivos del rol vía vista
+    const { data, error: e2 } = await supabase
+      .from('v_empleado_con_permisos')
+      .select('id, nombre, email, telefono, rol, activo, permisos_efectivos, must_change_password')
+      .eq('id', cred.id)
+      .single()
+
+    if (e2 || !data) {
+      return { ok: false, error: 'No se pudieron cargar los datos del usuario' }
     }
 
     const userData: User = {
@@ -67,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       telefono: data.telefono,
       rol: data.rol,
       activo: data.activo,
-      permisos: data.permisos || [],
+      permisos: Array.isArray(data.permisos_efectivos) ? data.permisos_efectivos : [],
       must_change_password: data.must_change_password,
     }
 

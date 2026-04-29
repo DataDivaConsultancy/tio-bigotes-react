@@ -17,12 +17,6 @@ interface Empleado {
   must_change_password?: boolean
 }
 
-const PERMISOS_OPTIONS = [
-  'Productos', 'Empleados', 'Operativa', 'BI', 'Forecast',
-  'Pendientes', 'CargaVentas', 'Auditoria', 'Proveedores',
-  'ProductosCompra', 'Locales', 'Stock',
-]
-
 const ROL_COLORS: Record<string, string> = {
   superadmin: 'bg-red-50 text-red-700',
   admin: 'bg-purple-50 text-purple-700',
@@ -49,7 +43,7 @@ export default function Empleados() {
   const [editing, setEditing] = useState<Empleado | null>(null)
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [emailSent, setEmailSent] = useState<{ to: string; password: string } | null>(null)
+  const [emailSent, setEmailSent] = useState<{ id: number; to: string; password: string } | null>(null)
   const [rolOptions, setRolOptions] = useState<string[]>([])
   const [form, setForm] = useState<EmpleadoForm>({
     nombre: '', apellido: '', email: '', telefono: '',
@@ -157,21 +151,30 @@ export default function Empleados() {
     if (creating) {
       const tempPassword = generateTempPassword()
       const passwordHash = await hashPassword(tempPassword)
-      const { error } = await supabase.from('empleados_v2').insert({
-        nombre: fullName,
-        email: form.email,
-        telefono: form.telefono || null,
-        rol: form.rol,
-        activo: true,
-        permisos: [],
-        password_hash: passwordHash,
-      })
-      if (error) {
-        alert(error.message)
+      const { data: inserted, error } = await supabase
+        .from('empleados_v2')
+        .insert({
+          nombre: fullName,
+          email: form.email,
+          telefono: form.telefono || null,
+          rol: form.rol,
+          activo: true,
+          permisos: [],
+          password_hash: passwordHash,
+          must_change_password: true,
+        })
+        .select('id')
+        .single()
+      if (error || !inserted) {
+        alert(error?.message || 'Error al crear empleado')
         setSaving(false)
         return
       }
-      setEmailSent({ to: form.email, password: tempPassword })
+      setEmailSent({ id: inserted.id as number, to: form.email, password: tempPassword })
+
+      // Mandar email automáticamente
+      sendWelcomeEmail(inserted.id as number, form.email, tempPassword)
+
       await loadEmpleados()
     } else if (editing) {
       const updates: Record<string, any> = {
@@ -199,18 +202,23 @@ export default function Empleados() {
     setSaving(false)
   }
 
-  function sendWelcomeEmail(email: string, password: string) {
-    const subject = encodeURIComponent('Bienvenido a Tio Bigotes Pro - Tus credenciales de acceso')
-    const body = encodeURIComponent(
-      `Hola,\n\nSe ha creado tu cuenta en Tio Bigotes Pro.\n\n` +
-      `Tus credenciales de acceso son:\n\n` +
-      `URL: https://app.sebbrofoods.com\n` +
-      `Email: ${email}\n` +
-      `Contrasena: ${password}\n\n` +
-      `Al iniciar sesion por primera vez se te pedira cambiar la contrasena.\n\n` +
-      `Saludos,\nEquipo Tio Bigotes`
-    )
-    window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank')
+  async function sendWelcomeEmail(empleadoId: number, _email: string, password: string) {
+    // Llama a la Edge Function 'invitar-empleado' que envía el email vía Resend
+    // y marca must_change_password = true
+    try {
+      const { data, error } = await supabase.functions.invoke('invitar-empleado', {
+        body: { empleado_id: empleadoId, password_temporal: password },
+      })
+      if (error) {
+        alert('Error enviando email: ' + error.message)
+        return
+      }
+      if (data && data.ok === false) {
+        alert('Error enviando email: ' + (data.error || 'desconocido'))
+      }
+    } catch (e: any) {
+      alert('Error enviando email: ' + (e.message || e))
+    }
   }
 
   async function resetPassword() {
@@ -222,7 +230,8 @@ export default function Empleados() {
       p_new_hash: hash,
     })
     if (result.ok) {
-      setEmailSent({ to: editing.email, password: tempPassword })
+      setEmailSent({ id: editing.id, to: editing.email, password: tempPassword })
+      sendWelcomeEmail(editing.id, editing.email, tempPassword)
     } else {
       alert(result.error || 'Error al resetear contrasena')
     }
@@ -285,7 +294,7 @@ export default function Empleados() {
                 <p><strong>Contrasena temporal:</strong> <code className="bg-green-100 px-2 py-0.5 rounded text-base font-mono">{emailSent.password}</code></p>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={() => sendWelcomeEmail(emailSent.to, emailSent.password)}
+                <Button size="sm" onClick={() => sendWelcomeEmail(emailSent.id, emailSent.to, emailSent.password)}
                   className="gap-1.5 bg-green-600 hover:bg-green-700">
                   <Mail size={14} /> Enviar email con credenciales
                 </Button>
@@ -358,35 +367,10 @@ export default function Empleados() {
                 </div>
               )}
             </div>
-            {/* Permisos */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-2 block">Permisos</label>
-              <div className="flex flex-wrap gap-2">
-                {PERMISOS_OPTIONS.map(p => {
-                  const isSelected = form.permisos.includes(p)
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => {
-                        setForm({
-                          ...form,
-                          permisos: isSelected
-                            ? form.permisos.filter(x => x !== p)
-                            : [...form.permisos, p],
-                        })
-                      }}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        isSelected
-                          ? 'bg-green-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  )
-                })}
-              </div>
+            {/* Aviso: los permisos los gestiona el rol */}
+            <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
+              Los permisos del empleado vienen determinados por su <strong>rol</strong>. Para cambiar
+              qué pantallas ve cada rol, ve a <strong>Roles y permisos</strong> en el menú.
             </div>
             {creating && (
               <p className="text-xs text-muted-foreground">
@@ -424,7 +408,6 @@ export default function Empleados() {
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Email</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Rol</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Permisos</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Estado</th>
                   <th className="text-right py-3 px-4 font-medium text-muted-foreground w-20"></th>
                 </tr>
