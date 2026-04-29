@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, Search, Pencil, Check, X, Package, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
-// âââ Types ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Producto {
   id: number
@@ -50,7 +50,7 @@ interface ProveedorOption {
 
 type TipoFilter = 'todos' | 'venta' | 'compra' | 'ambos'
 
-// âââ Component ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export default function Productos() {
   const [productos, setProductos] = useState<Producto[]>([])
@@ -92,7 +92,7 @@ export default function Productos() {
     if (data) setProveedores(data)
   }
 
-  // âââ Filtering ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Filtering ──────────────────────────────────────────────────────────────
 
   const filtered = productos.filter((p) => {
     const q = search.toLowerCase()
@@ -111,7 +111,7 @@ export default function Productos() {
     return matchesSearch && matchesCategoria && matchesTipo && matchesProveedor
   })
 
-  // âââ CRUD âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── CRUD ───────────────────────────────────────────────────────────────────
 
   function startCreate() {
     setCreating(true)
@@ -140,7 +140,7 @@ export default function Productos() {
     if (!form.nombre?.trim()) return
     setSaving(true)
 
-    // Determinar tipo automÃ¡ticamente
+    // Determinar tipo automáticamente
     const hasCompraData = form.proveedor_id != null || (form.precio_compra != null && form.precio_compra > 0)
     const isVendible = form.es_vendible ?? (editing?.es_vendible ?? true)
     let tipo = form.tipo || 'venta'
@@ -152,7 +152,7 @@ export default function Productos() {
     const payload: Record<string, any> = {
       nombre: form.nombre,
       nombre_normalizado: form.nombre?.toLowerCase()
-        .normalize('NFD').replace(/[Ì-Í¯]/g, '') || '',
+        .normalize('NFD').replace(/[̀-ͯ]/g, '') || '',
       codigo: form.codigo || null,
       categoria_id: form.categoria_id || null,
       observaciones: form.observaciones || null,
@@ -197,22 +197,22 @@ export default function Productos() {
     loadData()
   }
 
-  // âââ Excel export âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Excel export ───────────────────────────────────────────────────────────
 
   function exportExcel() {
     const rows = filtered.map((p) => ({
-      CÃ³digo: p.codigo || '',
+      Código: p.codigo || '',
       Nombre: p.nombre,
       Tipo: p.tipo,
-      CategorÃ­a: p.categoria || '',
+      Categoría: p.categoria || '',
       Proveedor: p.proveedor_nombre || '',
       'Precio compra': p.precio_compra ?? '',
       IVA: p.tipo_iva || '',
-      'Stock mÃ­n': p.stock_minimo ?? '',
+      'Stock mín': p.stock_minimo ?? '',
       'Uds/paq': p.unidades_por_paquete ?? '',
-      'DÃ­a pedido': p.dia_pedido || '',
-      'DÃ­a entrega': p.dia_entrega || '',
-      Activo: p.activo ? 'SÃ­' : 'No',
+      'Día pedido': p.dia_pedido || '',
+      'Día entrega': p.dia_entrega || '',
+      Activo: p.activo ? 'Sí' : 'No',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -228,7 +228,7 @@ export default function Productos() {
     ambos: 'bg-purple-50 text-purple-700',
   }
 
-  // âââ Form fields toggle ââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Form fields toggle ────────────────────────────────────────────────────
 
   const formTipo = form.tipo || 'venta'
   const showVentaFields = formTipo === 'venta' || formTipo === 'ambos'
@@ -246,8 +246,8 @@ export default function Productos() {
             <h1 className="text-xl font-bold">Productos</h1>
             <p className="text-sm text-muted-foreground">
               {filtered.length} productos
-              {filterTipo !== 'todos' ? ` Â· ${tipoLabel[filterTipo]}` : ''}
-              {filterCategoria !== '__all__' ? ` Â· ${filterCategoria === '__none__' ? 'Sin categorÃ­a' : filterCategoria}` : ''}
+              {filterTipo !== 'todos' ? ` · ${tipoLabel[filterTipo]}` : ''}
+              {filterCategoria !== '__all__' ? ` · ${filterCategoria === '__none__' ? 'Sin categoría' : filterCategoria}` : ''}
             </p>
           </div>
         </div>
@@ -266,7 +266,7 @@ export default function Productos() {
         <div className="relative flex-1 max-w-sm">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nombre o cÃ³digo..."
+            placeholder="Buscar por nombre o código..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -287,8 +287,8 @@ export default function Productos() {
           onChange={(e) => setFilterCategoria(e.target.value)}
           className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
         >
-          <option value="__all__">Todas las categorÃ­as</option>
-          <option value="__none__">Sin categorÃ­a</option>
+          <option value="__all__">Todas las categorías</option>
+          <option value="__none__">Sin categoría</option>
           {categorias.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
         </select>
         <select
@@ -343,7 +343,7 @@ export default function Productos() {
                 <Input value={form.nombre || ''} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
               </div>
               <div>
-                <label className="text-xs font-medium text-muted-foreground">CÃ³digo</label>
+                <label className="text-xs font-medium text-muted-foreground">Código</label>
                 <Input value={form.codigo || ''} onChange={(e) => setForm({ ...form, codigo: e.target.value })} />
               </div>
               <div>
@@ -358,13 +358,13 @@ export default function Productos() {
                 <h3 className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-3">Datos de venta</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">CategorÃ­a</label>
+                    <label className="text-xs font-medium text-muted-foreground">Categoría</label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={form.categoria_id ?? ''}
                       onChange={(e) => setForm({ ...form, categoria_id: e.target.value ? Number(e.target.value) : null })}
                     >
-                      <option value="">â Sin categorÃ­a â</option>
+                      <option value="">— Sin categoría —</option>
                       {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                     </select>
                   </div>
@@ -384,7 +384,7 @@ export default function Productos() {
                       value={form.proveedor_id ?? ''}
                       onChange={(e) => setForm({ ...form, proveedor_id: e.target.value ? Number(e.target.value) : null })}
                     >
-                      <option value="">â Sin proveedor â</option>
+                      <option value="">— Sin proveedor —</option>
                       {proveedores.map((pv) => <option key={pv.id} value={pv.id}>{pv.nombre_comercial}</option>)}
                     </select>
                   </div>
@@ -395,7 +395,7 @@ export default function Productos() {
                       value={form.precio_compra ?? ''}
                       onChange={(e) => setForm({ ...form, precio_compra: e.target.value ? Number(e.target.value) : null })}
                     />
-                  </div>
+                        </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">IVA</label>
                     <select
@@ -403,7 +403,7 @@ export default function Productos() {
                       value={form.tipo_iva || ''}
                       onChange={(e) => setForm({ ...form, tipo_iva: e.target.value || null })}
                     >
-                      <option value="">â Sin IVA â</option>
+                      <option value="">— Sin IVA —</option>
                       <option value="General 21%">General 21%</option>
                       <option value="Reducido 10%">Reducido 10%</option>
                       <option value="Superreducido 4%">Superreducido 4%</option>
@@ -411,7 +411,7 @@ export default function Productos() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">CÃ³digo proveedor</label>
+                    <label className="text-xs font-medium text-muted-foreground">Código proveedor</label>
                     <Input value={form.cod_proveedor || ''} onChange={(e) => setForm({ ...form, cod_proveedor: e.target.value })} />
                   </div>
                   <div>
@@ -423,7 +423,7 @@ export default function Productos() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Stock mÃ­nimo</label>
+                    <label className="text-xs font-medium text-muted-foreground">Stock mínimo</label>
                     <Input
                       type="number" step="1" min="0"
                       value={form.stock_minimo ?? 0}
@@ -431,11 +431,11 @@ export default function Productos() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">DÃ­a pedido</label>
-                    <Input value={form.dia_pedido || ''} onChange={(e) => setForm({ ...form, dia_pedido: e.target.value })} placeholder="Lunes, MiÃ©rcoles" />
+                    <label className="text-xs font-medium text-muted-foreground">Día pedido</label>
+                    <Input value={form.dia_pedido || ''} onChange={(e) => setForm({ ...form, dia_pedido: e.target.value })} placeholder="Lunes, Miércoles" />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">DÃ­a entrega</label>
+                    <label className="text-xs font-medium text-muted-foreground">Día entrega</label>
                     <Input value={form.dia_entrega || ''} onChange={(e) => setForm({ ...form, dia_entrega: e.target.value })} placeholder="Martes, Jueves" />
                   </div>
                   <div className="md:col-span-2 lg:col-span-1">
@@ -485,10 +485,10 @@ export default function Productos() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">CÃ³digo</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">Código</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground">Nombre</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Tipo</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">CategorÃ­a</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Categoría</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Proveedor</th>
                   <th className="text-right py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">P. compra</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">IVA</th>
@@ -501,7 +501,7 @@ export default function Productos() {
                     key={p.id}
                     className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${!p.activo ? 'opacity-50' : ''}`}
                   >
-                    <td className="py-3 px-4 text-muted-foreground font-mono text-xs">{p.codigo || p.cod_interno || 'â'}</td>
+                    <td className="py-3 px-4 text-muted-foreground font-mono text-xs">{p.codigo || p.cod_interno || '—'}</td>
                     <td className="py-3 px-4">
                       <div className="font-medium">{p.nombre}</div>
                       {p.observaciones && <div className="text-xs text-muted-foreground truncate max-w-xs">{p.observaciones}</div>}
@@ -516,15 +516,15 @@ export default function Productos() {
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
                           {p.categoria}
                         </span>
-                      ) : <span className="text-muted-foreground">â</span>}
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">
-                      {p.proveedor_nombre || 'â'}
+                      {p.proveedor_nombre || '—'}
                     </td>
                     <td className="py-3 px-4 text-right hidden md:table-cell font-medium">
-                      {p.precio_compra != null ? formatCurrency(p.precio_compra) : 'â'}
+                      {p.precio_compra != null ? formatCurrency(p.precio_compra) : '—'}
                     </td>
-                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground text-xs">{p.tipo_iva || 'â'}</td>
+                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground text-xs">{p.tipo_iva || '—'}</td>
                     <td className="py-3 px-4 text-right">
                       <button
                         onClick={() => startEdit(p)}
@@ -539,7 +539,7 @@ export default function Productos() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                      {productos.length === 0 ? 'AÃºn no hay productos. Crea el primero.' : 'No hay productos que coincidan con los filtros.'}
+                      {productos.length === 0 ? 'Aún no hay productos. Crea el primero.' : 'No hay productos que coincidan con los filtros.'}
                     </td>
                   </tr>
                 )}
