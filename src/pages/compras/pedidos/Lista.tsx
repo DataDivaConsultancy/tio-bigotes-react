@@ -9,6 +9,8 @@ import { listarPedidos } from '@/lib/compras/pedidos'
 import type { Pedido, EstadoPedido } from '@/lib/schemas/pedidos'
 import { ESTADO_LABELS } from '@/lib/schemas/pedidos'
 import { useRealtimePedidos } from '@/hooks/compras/useRealtimePedidos'
+import FiltrosCompras from '@/components/compras/FiltrosCompras'
+import { useFiltrosCompras } from '@/hooks/compras/useFiltrosCompras'
 
 const ESTADOS_FILTRO: { value: EstadoPedido | ''; label: string }[] = [
   { value: '', label: 'Todos los estados' },
@@ -24,6 +26,7 @@ const ESTADOS_FILTRO: { value: EstadoPedido | ''; label: string }[] = [
 
 export default function ListaPedidos() {
   const navigate = useNavigate()
+  const { filtros } = useFiltrosCompras()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +41,9 @@ export default function ListaPedidos() {
       const data = await listarPedidos({
         estado: estadoFiltro || undefined,
         buscar: search || undefined,
+        local_id: filtros.local_id,
+        desde: filtros.desde,
+        hasta: filtros.hasta,
       })
       setPedidos(data)
       // Contar pendientes (siempre, independiente del filtro)
@@ -55,7 +61,7 @@ export default function ListaPedidos() {
   useEffect(() => {
     cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estadoFiltro])
+  }, [estadoFiltro, filtros.local_id, filtros.desde, filtros.hasta])
 
   // Realtime: refrescar cuando cambia cualquier pedido
   useRealtimePedidos({ onChange: cargar })
@@ -101,6 +107,8 @@ export default function ListaPedidos() {
           </Button>
         </div>
       </div>
+
+      <FiltrosCompras />
 
       <div className="flex flex-wrap items-center gap-3">
         <form onSubmit={onSearchSubmit} className="relative flex-1 max-w-md">

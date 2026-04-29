@@ -76,6 +76,7 @@ export default function ComprasDashboard() {
 
   const mesActual = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
 
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
