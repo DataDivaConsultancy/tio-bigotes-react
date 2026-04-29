@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useOnline } from '@/hooks/useOnline'
 import { useColaPendiente } from '@/hooks/useColaPendiente'
+import { useConfigApp } from '@/hooks/useConfigApp'
 import { procesar as procesarColaOffline } from '@/lib/offline/sync'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -8,7 +9,7 @@ import {
   Package, Users, ClipboardList, BarChart3, TrendingUp,
   AlertCircle, Upload, Shield, Factory, ShoppingCart,
   Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
-  LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database,
+  LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database, Settings,
   WifiOff, RefreshCw, CloudOff, Wifi,
 } from 'lucide-react'
 
@@ -40,6 +41,7 @@ const navItems: NavItem[] = [
   { key: 'Pedidos', label: 'Pedidos', icon: FileText, path: '/compras/pedidos' },
   { key: 'Recepciones', label: 'Recepciones', icon: PackageCheck, path: '/compras/recepciones' },
   { key: 'Incidencias', label: 'Incidencias', icon: AlertTriangle, path: '/compras/incidencias' },
+  { key: 'Configuracion', label: 'Configuración', icon: Settings, path: '/configuracion', section: 'Sistema' },
 ]
 
 export default function Layout() {
@@ -48,6 +50,7 @@ export default function Layout() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const config = useConfigApp()
   const online = useOnline()
   const pendientes = useColaPendiente()
   const [sincronizando, setSincronizando] = useState(false)
@@ -109,12 +112,12 @@ export default function Layout() {
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 h-16 border-b border-white/10">
           <div className="w-9 h-9 rounded-lg bg-[hsl(var(--sidebar-active))] flex items-center justify-center text-white font-bold text-lg shrink-0">
-            TB
+            {config.app_logo_texto ?? 'TB'}
           </div>
           {sidebarOpen && (
             <div className="overflow-hidden">
-              <h1 className="font-semibold text-white text-sm leading-tight">Tío Bigotes</h1>
-              <p className="text-xs text-white/50">Pro Dashboard</p>
+              <h1 className="font-semibold text-white text-sm leading-tight">{config.app_nombre ?? 'Tío Bigotes'}</h1>
+              <p className="text-xs text-white/50">{config.app_subtitulo ?? 'Pro Dashboard'}</p>
             </div>
           )}
         </div>

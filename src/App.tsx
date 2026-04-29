@@ -9,6 +9,7 @@ import Productos from '@/pages/Productos'
 import Empleados from '@/pages/Empleados'
 import RolesPage from '@/pages/Roles'
 import CambiarPassword from '@/pages/CambiarPassword'
+import ConfiguracionPage from '@/pages/Configuracion'
 import Operativa from '@/pages/Operativa'
 import BI from '@/pages/BI'
 import Forecast from '@/pages/Forecast'
@@ -76,6 +77,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="Roles">
               <RolesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracion"
+          element={
+            <ProtectedRoute screen="Configuracion">
+              <ConfiguracionPage />
             </ProtectedRoute>
           }
         />
