@@ -21,7 +21,7 @@ import Proveedores from '@/pages/compras/Proveedores'
 // ProductosCompra eliminado — unificado en Productos
 import Locales from '@/pages/compras/Locales'
 import Stock from '@/pages/compras/Stock'
-// MÃ³dulo de Compras v2 (MVP1)
+// Módulo de Compras v2 (MVP1)
 import ComprasDashboard from '@/pages/compras/Dashboard'
 import ListaPedidos from '@/pages/compras/pedidos/Lista'
 import CrearPedido from '@/pages/compras/pedidos/Crear'
@@ -55,7 +55,7 @@ function AppRoutes() {
       >
         <Route path="/" element={<Home />} />
 
-        {/* GestiÃ³n */}
+        {/* Gestión */}
         <Route
           path="/productos"
           element={
@@ -176,7 +176,7 @@ function AppRoutes() {
           }
         />
 
-        {/* MÃ³dulo de Compras v2 â MVP1 */}
+        {/* Módulo de Compras v2 — MVP1 */}
         <Route
           path="/compras"
           element={
@@ -250,7 +250,7 @@ function AppRoutes() {
           }
         />
 
-        {/* Compras â Fase 2 (placeholders) */}
+        {/* Compras — Fase 2 (placeholders) */}
         <Route
           path="/compras/albaranes"
           element={
