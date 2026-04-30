@@ -40,7 +40,7 @@ export default function PreciosVenta() {
   const [locales, setLocales] = useState<Local[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [editCells, setEditCells] = useState<Record<string, string>>({}) // "prodId-localId" â value
+  const [editCells, setEditCells] = useState<Record<string, string>>({}) // "prodId-localId" → value
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
@@ -112,9 +112,17 @@ export default function PreciosVenta() {
     setDirty(true)
   }
 
-  function margenColor(margen: number | null | undefined, precio: number | null | undefined) {
-    if (margen == null || precio == null || precio === 0) return ''
-    const pct = (margen / precio) * 100
+  function margenPct(margen: number | null | undefined, coste: number | null | undefined) {
+    // margen ya viene calculado sobre precio sin IVA desde el backend
+    // % = margen / precio_sin_iva = margen / (coste + margen)
+    if (margen == null || coste == null) return null
+    const precioSinIva = coste + margen
+    if (precioSinIva <= 0) return null
+    return (margen / precioSinIva) * 100
+  }
+
+  function margenColor(pct: number | null) {
+    if (pct == null) return ''
     if (pct >= 60) return 'text-green-500'
     if (pct >= 40) return 'text-yellow-500'
     return 'text-red-500'
@@ -180,7 +188,7 @@ export default function PreciosVenta() {
         <div>
           <h1 className="text-2xl font-bold">Precios de Venta</h1>
           <p className="text-sm text-muted-foreground">
-            Gestiona precios por local. Deja vacÃ­o para heredar el precio base.
+            Gestiona precios por local. Deja vacío para heredar el precio base.
           </p>
         </div>
         {dirty && (
@@ -217,9 +225,9 @@ export default function PreciosVenta() {
                     <th className="text-left p-3 font-medium sticky left-0 bg-muted/30 min-w-[200px]">
                       Producto
                     </th>
-                    <th className="text-right p-3 font-medium w-24">Coste</th>
+                    <th className="text-right p-3 font-medium w-24">Coste (s/IVA)</th>
                     <th className="text-right p-3 font-medium w-28 bg-blue-500/5">
-                      Precio Base
+                      PVP Base (c/IVA)
                     </th>
                     {locales.map(l => (
                       <th key={l.id} className="text-right p-3 font-medium w-28">
@@ -237,7 +245,7 @@ export default function PreciosVenta() {
                       <td className="p-3 text-right font-mono text-muted-foreground">
                         {row.coste_por_unidad != null
                           ? formatCurrency(row.coste_por_unidad)
-                          : 'â'}
+                          : '—'}
                       </td>
                       {/* Precio base */}
                       <td className="p-3 bg-blue-500/5">
@@ -247,7 +255,7 @@ export default function PreciosVenta() {
                           step={0.01}
                           value={getCellValue(row, 'base')}
                           onChange={e => setCellValue(row.producto_id, 'base', e.target.value)}
-                          placeholder="â"
+                          placeholder="—"
                           className="h-8 text-right text-sm w-24"
                         />
                       </td>
@@ -268,18 +276,19 @@ export default function PreciosVenta() {
                                 onChange={e => setCellValue(row.producto_id, l.id, e.target.value)}
                                 placeholder={row.precio_base != null
                                   ? `${row.precio_base}`
-                                  : 'â'}
+                                  : '—'}
                                 className={`h-8 text-right text-sm w-24 ${
                                   isLocal ? 'border-blue-400' : ''
                                 }`}
                               />
-                              {cell?.margen != null && cell.precio != null && (
-                                <span className={`text-[10px] font-mono ${
-                                  margenColor(cell.margen, cell.precio)
-                                }`}>
-                                  {((cell.margen / cell.precio) * 100).toFixed(0)}% margen
-                                </span>
-                              )}
+                              {(() => {
+                                const pct = margenPct(cell?.margen, row.coste_por_unidad)
+                                return pct != null ? (
+                                  <span className={`text-[10px] font-mono ${margenColor(pct)}`}>
+                                    {pct.toFixed(0)}% margen
+                                  </span>
+                                ) : null
+                              })()}
                             </div>
                           </td>
                         )
@@ -297,7 +306,7 @@ export default function PreciosVenta() {
       <div className="flex gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
           <span className="w-3 h-3 rounded border-2 border-blue-400 inline-block" />
-          Precio especÃ­fico del local
+          Precio específico del local
         </span>
         <span className="flex items-center gap-1">
           <span className="w-3 h-3 rounded border border-border inline-block" />
