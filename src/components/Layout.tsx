@@ -10,7 +10,7 @@ import {
   AlertCircle, Upload, Shield, Factory, ShoppingCart,
   Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
   LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database, Settings,
-  WifiOff, RefreshCw, CloudOff, Wifi,
+  WifiOff, RefreshCw, CloudOff, Wifi, BookOpen, DollarSign,
 } from 'lucide-react'
 
 interface NavItem {
@@ -24,6 +24,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { key: 'Home', label: 'Inicio', icon: Home, path: '/' },
   { key: 'Productos', label: 'Productos', icon: Package, path: '/productos', section: 'Gestión' },
+  { key: 'Escandallos', label: 'Escandallos', icon: BookOpen, path: '/escandallos', section: 'Gestión' },
+  { key: 'Precios', label: 'Precios de Venta', icon: DollarSign, path: '/precios', section: 'Gestión' },
   { key: 'Empleados', label: 'Empleados', icon: Users, path: '/empleados' },
     { key: 'Roles', label: 'Roles', icon: KeyRound, path: '/roles' },
   { key: 'Operativa', label: 'Control Diario', icon: ClipboardList, path: '/operativa', section: 'Operaciones' },
