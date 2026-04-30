@@ -36,6 +36,7 @@ interface Producto {
   plazo_pago: string | null
   notas: string | null
   compra_legacy_id: number | null
+  en_precios_venta: boolean
 }
 
 interface CategoriaProducto {
@@ -121,6 +122,7 @@ export default function Productos() {
       tipo: 'venta', proveedor_id: null, precio_compra: null,
       tipo_iva: null, dia_pedido: null, dia_entrega: null,
       stock_minimo: 0, unidades_por_paquete: 1, notas: null,
+      en_precios_venta: false,
     })
   }
 
@@ -169,6 +171,7 @@ export default function Productos() {
       forma_pago: form.forma_pago || null,
       plazo_pago: form.plazo_pago || null,
       notas: form.notas || null,
+      en_precios_venta: form.en_precios_venta ?? false,
     }
 
     if (editing) {
@@ -367,6 +370,17 @@ export default function Productos() {
                       <option value="">— Sin categoría —</option>
                       {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                     </select>
+                  </div>
+                  <div className="flex items-end">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.en_precios_venta ?? false}
+                        onChange={(e) => setForm({ ...form, en_precios_venta: e.target.checked })}
+                        className="rounded"
+                      />
+                      En Precios de Venta
+                    </label>
                   </div>
                 </div>
               </div>
