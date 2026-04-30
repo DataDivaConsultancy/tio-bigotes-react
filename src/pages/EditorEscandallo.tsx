@@ -10,7 +10,7 @@ import {
   BookOpen, ChevronDown, ChevronUp
 } from 'lucide-react'
 
-/* âââ Types âââ */
+/* ─── Types ─── */
 
 interface Linea {
   key: string // client-side key for React
@@ -101,7 +101,7 @@ export default function EditorEscandallo() {
   const [selectorOpen, setSelectorOpen] = useState<number | null>(null)
   const [selectorSearch, setSelectorSearch] = useState('')
 
-  /* âââ Load lookup data âââ */
+  /* ─── Load lookup data ─── */
 
   useEffect(() => {
     Promise.all([
@@ -126,7 +126,7 @@ export default function EditorEscandallo() {
     })
   }, [])
 
-  /* âââ Load existing escandallo âââ */
+  /* ─── Load existing escandallo ─── */
 
   useEffect(() => {
     if (isNew) return
@@ -143,7 +143,7 @@ export default function EditorEscandallo() {
       .single()
 
     if (errEsc || !esc) {
-      setError('No se encontrÃ³ el escandallo')
+      setError('No se encontró el escandallo')
       setLoading(false)
       return
     }
@@ -185,7 +185,7 @@ export default function EditorEscandallo() {
     setLoading(false)
   }
 
-  /* âââ Resolve component names & costs âââ */
+  /* ─── Resolve component names & costs ─── */
 
   const resolveComponente = useCallback((linea: Linea) => {
     if (linea.componente_producto_id) {
@@ -202,10 +202,10 @@ export default function EditorEscandallo() {
         coste: linea.coste_override ?? (s?.coste_por_unidad || 0),
       }
     }
-    return { nombre: '\u2014 Seleccionar \u2014', coste: 0 }
+    return { nombre: '— Seleccionar —', coste: 0 }
   }, [productosCompra, subrecetas])
 
-  /* âââ Cost calculations âââ */
+  /* ─── Cost calculations ─── */
 
   const calcCosteLinea = (linea: Linea) => {
     const { coste } = resolveComponente(linea)
@@ -216,7 +216,7 @@ export default function EditorEscandallo() {
   const costePorUnidad = cabecera.cantidad_resultado > 0
     ? costeTotal / cabecera.cantidad_resultado : 0
 
-  /* âââ Line operations âââ */
+  /* ─── Line operations ─── */
 
   function addLinea() {
     const newLinea = emptyLinea()
@@ -261,108 +261,361 @@ export default function EditorEscandallo() {
     setSelectorOpen(null)
     setSelectorSearch('')
   }
-]\BY
-[X\Ë[ÝOOH
-HÂÙ]\Ü	ÐpìXYH[Y[ÜÈ[H0ë[XIÊB]\BËÈ[Y]H[[\È]HHÛÛ\Û[ÛÛÝ[ÛÛ\]\ÈH[X\Ë[\O[ÛÛ\Û[WÜÙXÝ×ÚY	[ÛÛ\Û[WÙ\ØØ[[×ÚY
-BY
-[ÛÛ\]\Ë[Ý
-HÂÙ]\Ü	Ò^H0ë[X\ÈÚ[ÛÛ\Û[HÙ[XØÚ[ÛYÉÊB]\BÙ]Ø][ÊYJBÙ]\Ü	ÉÊBËÈÚXÚÈÜÞXÛ\ÈY[H[HY\[Ù\ÈHÝX\XÚ\BÛÛÝÝXXÙ]RYÈH[X\Â[\OÛÛ\Û[WÙ\ØØ[[×ÚY
-BX\
-OÛÛ\Û[WÙ\ØØ[[×ÚYJBY
-ÝXXÙ]RYË[Ý	Z\Ó]ÊHÂÛÛÝÈ]NÚXÛÜÈHH]ØZ]Ý\X\ÙKÊ	Ü×Ù]XÝ\ØÚXÛÜ×Ù\ØØ[[ÉËÂÙ\ØØ[[×ÚY[X\Y
-KJBY
-ÚXÛÜÈ	\^K\Ð\^JÚXÛÜÊH	ÚXÛÜË[Ý
-HÂÙ]\ÜÚXÛÈ]XÝYÎ	ØÚXÛÜËX\
 
-Î[JHOË]ËÚ[	È8¡¤	ÊJKÚ[	Ë	Ê_X
-BÙ]Ø][Ê[ÙJB]\BBÛÛÝÛÛ[X\ÈH[X\ËX\
-O
-ÂÛÛ\Û[WÜÙXÝ×ÚYÛÛ\Û[WÜÙXÝ×ÚYÛÛ\Û[WÙ\ØØ[[×ÚYÛÛ\Û[WÙ\ØØ[[×ÚYØ[YYØ]NØ[YYØ]K[YY[YYY\XWÜÝY\XWÜÝÛÜÝWÛÝ\YNÛÜÝWÛÝ\YKÝ\ÎÝ\È[Ü[Ü[JJBY
-\Ó]ÊHÂËÈÜX]H]ÂÛÛÝÈ]K\Ü\HH]ØZ]Ý\X\ÙKÊ	Ü×ØÜX\Ù\ØØ[[ÉËÂÜÙXÝ×ÚYØXXÙ\KÙXÝ×ÚYÛÛXNØXXÙ\KÛXK[J
-KÙ\ØÜ\Ú[ÛØXXÙ\K\ØÜ\Ú[Û[Ý[YYÜ\Ý[YÎØXXÙ\K[YYÜ\Ý[YËØØ[YYÜ\Ý[YÎØXXÙ\KØ[YYÜ\Ý[YËÙ\×ÜÝXXÙ]NØXXÙ\K\×ÜÝXXÙ]KÛ[X\ÎÛÛ[X\ËJBY
-\HÈÙ]\Ü\Y\ÜØYÙJNÈÙ]Ø][Ê[ÙJNÈ]\BY
-]OËY
-H]YØ]JÙ\ØØ[[ÜËÉÙ]KYXÈ\XÙNYHJB[ÙH]YØ]J	ËÙ\ØØ[[ÜÉÊBH[ÙHÂËÈ\]N[]HÛ[\Ë\]HXY\KZ[Ù\[\ÂÛÛÝ\ØÒYH[X\Y
-BËÈ\]HXY\ÛÛÝÈ\Ü\XYHH]ØZ]Ý\X\ÙBÛJ	Ù\ØØ[[ÜÉÊB\]JÂÙXÝ×ÚYØXXÙ\KÙXÝ×ÚYÛXNØXXÙ\KÛXK[J
-K\ØÜ\Ú[ÛØXXÙ\K\ØÜ\Ú[Û[[YYÜ\Ý[YÎØXXÙ\K[YYÜ\Ý[YËØ[YYÜ\Ý[YÎØXXÙ\KØ[YYÜ\Ý[YË\×ÜÝXXÙ]NØXXÙ\K\×ÜÝXXÙ]KÝ\ÎØXXÙ\KÝ\È[JB\J	ÚY	Ë\ØÒY
-BY
-\XY
-HÈÙ]\Ü\XYY\ÜØYÙJNÈÙ]Ø][Ê[ÙJNÈ]\BËÈ[]HÛ[\È[[Ù\]ÈÛ\ÂÛÛÝÈ\Ü\[HH]ØZ]Ý\X\ÙBÛJ	Ù\ØØ[[×Û[X\ÉÊB[]J
-B\J	Ù\ØØ[[×ÚY	Ë\ØÒY
-BY
-\[
-HÈÙ]\Ü\[Y\ÜØYÙJNÈÙ]Ø][Ê[ÙJNÈ]\BY
-ÛÛ[X\Ë[Ý
-HÂÛÛÝÈ\Ü\[ÈHH]ØZ]Ý\X\ÙBÛJ	Ù\ØØ[[×Û[X\ÉÊB[Ù\
-ÛÛ[X\ËX\
-O
-È\ØØ[[×ÚY\ØÒYJJJBY
-\[ÊHÈÙ]\Ü\[ËY\ÜØYÙJNÈÙ]Ø][Ê[ÙJNÈ]\BBËÈ[ØYÈÙ]\Ú]B]ØZ]ØY\ØØ[[Ê
-BBÙ]Ø][Ê[ÙJBBÊ8¥ 8¥ 8¥ [\8¥ 8¥ 8¥ 
-ÂY
-ØY[ÊHÂ]\]Û\ÜÓ[YOHN^XÙ[\^[]]YYÜYÜÝ[Ø\Ø[ËÙ]BÛÛÝ[\YÛÛ\HHÙXÝÜÐÛÛ\K[\OÛXKÓÝÙ\Ø\ÙJ
-K[ÛY\ÊÙ[XÝÜÙX\ÚÓÝÙ\Ø\ÙJ
-JB
-BÛÛÝ[\YÝXXÙ]\ÈHÝXXÙ]\Ë[\ÈOËÛXKÓÝÙ\Ø\ÙJ
-K[ÛY\ÊÙ[XÝÜÙX\ÚÓÝÙ\Ø\ÙJ
-JB
-K[\ÈO\Ó]ÈËYOOH[X\Y
-JHËÈ^ÛYHÙ[]\
-]Û\ÜÓ[YOHÜXÙK^KMËÊXY\\
-ßB]Û\ÜÓ[YOH^][\ËXÙ[\\ÝYKX]ÙY[]Û\ÜÓ[YOH^][\ËXÙ[\Ø\LÈ]Û\X[HÚÜÝÚ^OHÛHÛÛXÚÏ^Ê
-HO]YØ]J	ËÙ\ØØ[[ÜÉÊ_O\ÝÓYÚ^O^ÌMHÏÐ]Û]HÛ\ÜÓ[YOH^LÛXÛÚ\Ó]ÈÈ	ÓY]È\ØØ[[ÉÈØXXÙ\KÛX_BÚOÛ\ÜÓ[YOH^\ÛH^[]]YYÜYÜÝ[Ú\Ó]ÈÈ	ÑY[HHÛÛ\ÜÚXÚpìÛHÛÜÝH[ÙXÝÉÈ\ØØ[[ÈÉÚYXBÜÙ]Ù]]ÛÛÛXÚÏ^Ú[TØ]_H\ØXY^ÜØ][ßOØ]HÚ^O^ÌMHÛ\ÜÓ[YOH\LÏÜØ][ÈÈ	ÑÝX\[ËÈ	ÑÝX\\ßBÐ]ÛÙ]Ù\Ü	
-]Û\ÜÓ[YOHLÈÝ[Y[ÈË\YMLÌL^\YML^\ÛH^][\ËXÙ[\Ø\L[\X[ÛHÚ^O^ÌMHÏÙ\ÜBÙ]
-_B]Û\ÜÓ[YOHÜYÜYXÛÛËLHÎÜYXÛÛËLÈØ\MËÊYØXXÙ\H
-È0ë[X\È
-ÛÛÊH
-ßB]Û\ÜÓ[YOHÎÛÛ\Ü[LÜXÙK^KMËÊØXXÙ\H
-ßBØ\Ø\XY\Û\ÜÓ[YOHLÈØ\]HÛ\ÜÓ[YOH^X\ÙH]ÜÈÙ[\[\ÏÐØ\]OÐØ\XY\Ø\ÛÛ[Û\ÜÓ[YOHÜXÙK^KM]Û\ÜÓ[YOHÜYÜYXÛÛËLHYÜYXÛÛËLØ\M]X[Û\ÜÓ[YOH^\ÛHÛ[YY][HXLHØÚÈÛXH
-ÛX[[][YO^ØØXXÙ\KÛX_BÛÚ[ÙO^ÙHOÙ]ØXXÙ\JÈØXXÙ\KÛXNK\Ù][YHJ_BXÙZÛ\HZ[\[YHHØ\HÝX]HÏÙ]]X[Û\ÜÓ[YOH^\ÛHÛ[YY][HXLHØÚÈÙXÝÈ[Ý[YÏÛX[Ù[XÝ[YO^ØØXXÙ\KÙXÝ×ÚYÏÈ	ÉßBÛÚ[ÙO^ÙHOÙ]ØXXÙ\JÂØXXÙ\KÙXÝ×ÚYK\Ù][YHÈ[X\K\Ù][YJH[J_BÛ\ÜÓ[YOHËY[NHÝ[Y[YÜ\ËXXÚÙÜÝ[LÈ^\ÛHÜ[Û[YOH¸ %Ú[[Ý[\
-ÝX\XÙ]H\JH8 %ÛÜ[ÛÜÙXÝÜÕ[KX\
-O
-Ü[ÛÙ^O^ÜYH[YO^ÜYOÜÛX_OÛÜ[Û
-J_BÜÙ[XÝÙ]Ù]]Û\ÜÓ[YOHÜYÜYXÛÛËLHYÜYXÛÛËLÈØ\M]X[Û\ÜÓ[YOH^\ÛHÛ[YY][HXLHØÚÈØ[YY\Ý[YÏÛX[[]\OH[X\Z[^Ì_BÝ\^Ì_B[YO^ØØXXÙ\KØ[YYÜ\Ý[YßBÛÚ[ÙO^ÙHOÙ]ØXXÙ\JÂØXXÙ\KØ[YYÜ\Ý[YÎ[X\K\Ù][YJHKJ_BÏÙ]]X[Û\ÜÓ[YOH^\ÛHÛ[YY][HXLHØÚÈ[YY\Ý[YÏÛX[Ù[XÝ[YO^ØØXXÙ\K[YYÜ\Ý[YßBÛÚ[ÙO^ÙHOÙ]ØXXÙ\JÈØXXÙ\K[YYÜ\Ý[YÎK\Ù][YHJ_BÛ\ÜÓ[YOHËY[NHÝ[Y[YÜ\ËXXÚÙÜÝ[LÈ^\ÛHÝ[YY\ËX\
-HO
-Ü[ÛÙ^O^ÝKÛÙYÛßH[YO^ÝKÛÙYÛßOÝKÛX_H
-ÝKÛÙYÛßJOÛÜ[Û
-J_BÜÙ[XÝÙ]]Û\ÜÓ[YOH^][\ËY[Ø\LX[Û\ÜÓ[YOH^][\ËXÙ[\Ø\LÝ\ÛÜ\Ú[\NH[]\OHÚXÚØÞÚXÚÙY^ØØXXÙ\K\×ÜÝXXÙ]_BÛÚ[ÙO^ÙHOÙ]ØXXÙ\JÈØXXÙ\K\×ÜÝXXÙ]NK\Ù]ÚXÚÙYJ_BÛ\ÜÓ[YOHÝ[YÏÜ[Û\ÜÓ[YOH^\ÛHÛ[YY][H\ÈÝX\XÙ]OÜÜ[ÛX[Ù]Ù]]X[Û\ÜÓ[YOH^\ÛHÛ[YY][HXLHØÚÈÝ\ÏÛX[^\XB[YO^ØØXXÙ\KÝ\ßBÛÚ[ÙO^ÙHOÙ]ØXXÙ\JÈØXXÙ\KÝ\ÎK\Ù][YHJ_BXÙZÛ\HÝ\È[\\ÈÛØHHXÙ]KÛ\ÜÓ[YOHËY[Ý[Y[YÜ\ËXXÚÙÜÝ[LÈKL^\ÛHZ[ZVÍH\Ú^K^HÝÜÏ^ÌBÏÙ]ÐØ\ÛÛ[ÐØ\ËÊ0ë[X\È
-ßBØ\Ø\XY\Û\ÜÓ[YOHLÈ]Û\ÜÓ[YOH^][\ËXÙ[\\ÝYKX]ÙY[Ø\]HÛ\ÜÓ[YOH^X\ÙH[ÜYY[\ÈÈÛÛ\Û[\È
-Û[X\Ë[ÝJBÐØ\]O]ÛÚ^OHÛHÛÛXÚÏ^ØY[X_O\ÈÚ^O^ÌMHÛ\ÜÓ[YOH\LHÏpìXY\0ë[XBÐ]ÛÙ]ÐØ\XY\Ø\ÛÛ[Û\ÜÓ[YOHLÛ[X\Ë[ÝOOHÈ
-]Û\ÜÓ[YOHN^XÙ[\^[]]YYÜYÜÝ[È^H[ÜYY[\Ë^ÛXÈ[pìXY\0ë[XH\H[\^\Ù]
-H
-]Û\ÜÓ[YOHÝ\ÝË^X]]ÈXHÛ\ÜÓ[YOHËY[^\ÛHXYÛ\ÜÓ[YOHÜ\XË[]]YÌÌÛ\ÜÓ[YOHËNLÝÛ\ÜÓ[YOH^[YLÛ[YY][HÛÛ\Û[OÝÛ\ÜÓ[YOH^\YÚLÛ[YY][HËLØ[YYÝÛ\ÜÓ[YOH^[YLÛ[YY][HËL[YYÝÛ\ÜÓ[YOH^\YÚLÛ[YY][HËLY\XH	OÝÛ\ÜÓ[YOH^\YÚLÛ[YY][HËLÛÜÝKÝYÝÛ\ÜÓ[YOH^\YÚLÛ[YY][HËLÛÜÝH0ë[XOÝÛ\ÜÓ[YOHËLLÝÝÝXYÙOÛ[X\ËX\
+  /* ─── Save ─── */
 
-[XKY
-HOÂÛÛÝÛÛ\H\ÛÛPÛÛ\Û[J[XJBÛÛÝÛÜÝS[HHØ[ÐÛÜÝS[XJ[XJB]\
-Ù^O^Û[XKÙ^_HÛ\ÜÓ[YOHÜ\XÝ\Ë[]]YÌLËÊÜ\]ÛÈ
-ßBÛ\ÜÓ[YOHLH^XÙ[\]Û\ÜÓ[YOH^^XÛÛ][\ËXÙ[\Ø\LH]ÛÛÛXÚÏ^Ê
-HO[ÝS[XJ[XKÙ^K	Ý\	Ê_B\ØXY^ÚYOOHBÛ\ÜÓ[YOH^[]]YYÜYÜÝ[Ý\^YÜYÜÝ[\ØXYÜXÚ]KLÌÚ]Û\Ú^O^ÌLHÏØ]Û]ÛÛÛXÚÏ^Ê
-HO[ÝS[XJ[XKÙ^K	ÙÝÛÊ_B\ØXY^ÚYOOH[X\Ë[ÝH_BÛ\ÜÓ[YOH^[]]YYÜYÜÝ[Ý\^YÜYÜÝ[\ØXYÜXÚ]KLÌÚ]ÛÝÛÚ^O^ÌLHÏØ]ÛÙ]ÝËÊÛÛ\Û[Ù[XÝÜ
-ßBÛ\ÜÓ[YOHL[]]H]ÛÛÛXÚÏ^Ê
-HOÂÙ]Ù[XÝÜÜ[Ù[XÝÜÜ[OOHYÈ[Y
-BÙ]Ù[XÝÜÙX\Ú
-	ÉÊB_BÛ\ÜÓ[YO^Ø^[YËY[LKLHÝ[YÜ\^\ÛH[Ø]H	ÂÛÛ\ÛXHOOH	ø %Ù[XØÚ[Û\8 %	ÂÈ	Ý^[]]YYÜYÜÝ[Ü\Y\ÚY	Â	ØÜ\][Ü\[Ý\Ü\XÜ\ÂXBØÛÛ\ÛX_BØ]ÛËÊÜÝÛÙ[XÝÜ
-ßBÜÙ[XÝÜÜ[OOHY	
-]Û\ÜÓ[YOHXÛÛ]HMLÜY[YL]LHËNËXXÚÙÜÝ[Ü\Ý[Y[ÈÚYÝË[ÈX^ZMÝ\ÝËZY[]Û\ÜÓ[YOHLÜ\X[]XÙZÛ\H\ØØ\ÙXÝÈÈÝX\XÙ]K[YO^ÜÙ[XÝÜÙX\ÚBÛÚ[ÙO^ÙHOÙ]Ù[XÝÜÙX\Ú
-K\Ù][YJ_B]]ÑØÝ\ÂÛ\ÜÓ[YOHN^\ÛHÏÙ]]Û\ÜÓ[YOHÝ\ÝË^KX]]ÈX^ZMÙ[\YÛÛ\K[Ý	
-]Û\ÜÓ[YOHLÈKLH^^ÈÛ[YY][H^[]]YYÜYÜÝ[Ë[]]YÌÌÙXÝÜÈHÛÛ\BÙ]Ù[\YÛÛ\KÛXÙJ
-KX\
-O
-]ÛÙ^O^ØIÜYXBÛÛXÚÏ^Ê
-HOÙ[XÝÛÛ\Û[J[XKÙ^K	ÜÙXÝÉËY
-_BÛ\ÜÓ[YOHËY[^[YLÈKLKH^\ÛHÝ\Ë[]]YÍL^\ÝYKX]ÙY[Ü[Û\ÜÓ[YOH[Ø]HÜÛX_OÜÜ[Ü[Û\ÜÓ[YOH^[]]YYÜYÜÝ[[LÚ[ËLÜXÚ[×ØÛÛ\HOH[ÈÜX]Ý\[ÞJXÚ[×ØÛÛ\JH	ø %	ßBÜÜ[Ø]Û
-J_BÏ
-_BÙ[\YÝXXÙ]\Ë[Ý	
-]Û\ÜÓ[YOHLÈKLH^^ÈÛ[YY][H^\\KMLË\\KMLÍHÝX\XÙ]\ÂÙ]Ù[\YÝXXÙ]\ËÛXÙJL
-KX\
-ÈO
-]ÛÙ^O^ØËIÜËYXBÛÛXÚÏ^Ê
-HOÙ[XÝÛÛ\Û[J[XKÙ^K	ÜÝXXÙ]IËËY
-_BÛ\ÜÓ[YOHËY[^[YLÈKLKH^\ÛHÝ\Ë[]]YÍL^\ÝYKX]ÙY[Ü[Û\ÜÓ[YOH[Ø]H^\\KMÛÚÓÜ[Ú^O^ÌLHÛ\ÜÓ[YOH[[H\LHÏÜËÛX_BÜÜ[Ü[Û\ÜÓ[YOH^[]]YYÜYÜÝ[[LÚ[ËLÙÜX]Ý\[ÞJËÛÜÝWÜÜÝ[YY
-_KÞÜË[YYÜ\Ý[YßBÜÜ[Ø]Û
-J_BÏ
-_BÙ[\YÛÛ\K[ÝOOH	[\YÝXXÙ]\Ë[ÝOOH	
-]Û\ÜÓ[YOHLÈ^XÙ[\^[]]YYÜYÜÝ[^\ÛHÚ[\Ý[YÜÂÙ]
+  async function handleSave() {
+    if (!cabecera.nombre.trim()) {
+      setError('El nombre es obligatorio')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      // Check for cycles if we have sub-recipe components
+      const subComponents = lineas
+        .filter(l => l.componente_escandallo_id)
+        .map(l => l.componente_escandallo_id!)
+
+      if (subComponents.length > 0 && !isNew) {
+        const { data: cycleCheck } = await supabase
+          .rpc('rpc_detectar_ciclos_escandallo', {
+            p_escandallo_id: Number(id),
+            p_componentes_escandallo: subComponents,
+          })
+        if (cycleCheck && cycleCheck.length > 0) {
+          setError(`Ciclo detectado: ${cycleCheck.map((c: any) => c.nombre).join(' → ')}`)
+          setSaving(false)
+          return
+        }
+      }
+
+      const payload = {
+        p_nombre: cabecera.nombre.trim(),
+        p_descripcion: cabecera.descripcion || null,
+        p_producto_id: cabecera.producto_id,
+        p_unidad_resultado: cabecera.unidad_resultado,
+        p_cantidad_resultado: cabecera.cantidad_resultado,
+        p_es_subreceta: cabecera.es_subreceta,
+        p_notas: cabecera.notas || null,
+        p_lineas: lineas.map((l, i) => ({
+          componente_producto_id: l.componente_producto_id,
+          componente_escandallo_id: l.componente_escandallo_id,
+          cantidad_bruta: l.cantidad_bruta,
+          unidad: l.unidad,
+          merma_pct: l.merma_pct,
+          coste_override: l.coste_override,
+          notas: l.notas || null,
+          orden: i,
+        })),
+      }
+
+      if (isNew) {
+        const { data, error: err } = await supabase.rpc('rpc_crear_escandallo', payload)
+        if (err) throw err
+        navigate(`/escandallos/${data}`, { replace: true })
+      } else {
+        // Update: delete old lines, update header, insert new lines
+        const escId = Number(id)
+
+        const { error: errUpd } = await supabase
+          .from('escandallos')
+          .update({
+            nombre: cabecera.nombre.trim(),
+            descripcion: cabecera.descripcion || null,
+            producto_id: cabecera.producto_id,
+            unidad_resultado: cabecera.unidad_resultado,
+            cantidad_resultado: cabecera.cantidad_resultado,
+            es_subreceta: cabecera.es_subreceta,
+            notas: cabecera.notas || null,
+          })
+          .eq('id', escId)
+
+        if (errUpd) throw errUpd
+
+        // Delete old lines
+        await supabase.from('escandallo_lineas').delete().eq('escandallo_id', escId)
+
+        // Insert new lines
+        if (lineas.length > 0) {
+          const { error: errLines } = await supabase
+            .from('escandallo_lineas')
+            .insert(lineas.map((l, i) => ({
+              escandallo_id: escId,
+              componente_producto_id: l.componente_producto_id,
+              componente_escandallo_id: l.componente_escandallo_id,
+              cantidad_bruta: l.cantidad_bruta,
+              unidad: l.unidad,
+              merma_pct: l.merma_pct,
+              coste_override: l.coste_override,
+              notas: l.notas || null,
+              orden: i,
+            })))
+          if (errLines) throw errLines
+        }
+
+        // Reload to get fresh data
+        await loadEscandallo()
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /* ─── Render ─── */
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    )
+  }
+
+  const filteredProductos = productosCompra.filter(p =>
+    p.nombre.toLowerCase().includes(selectorSearch.toLowerCase())
+  )
+  const filteredSubrecetas = subrecetas.filter(s =>
+    s.nombre.toLowerCase().includes(selectorSearch.toLowerCase())
+  )
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/escandallos')}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold">
+            {isNew ? 'Nuevo Escandallo' : cabecera.nombre}
+          </h1>
+          {cabecera.es_subreceta && (
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+              Sub-receta
+            </span>
+          )}
+        </div>
+        <Button onClick={handleSave} disabled={saving}>
+          <Save className="h-4 w-4 mr-2" />
+          {saving ? 'Guardando...' : 'Guardar'}
+        </Button>
+      </div>
+
+      {error && (
+        <div className="bg-destructive/10 text-destructive px-4 py-3 rounded-lg flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" />
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Left: Main content */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* Cabecera */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Datos generales</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Nombre *</label>
+                  <Input
+                    value={cabecera.nombre}
+                    onChange={e => setCabecera({ ...cabecera, nombre: e.target.value })}
+                    placeholder="Nombre del escandallo"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Producto vinculado</label>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                    value={cabecera.producto_id || ''}
+                    onChange={e => setCabecera({
+                      ...cabecera,
+                      producto_id: e.target.value ? Number(e.target.value) : null,
+                    })}
+                  >
+                    <option value="">— Sin vincular —</option>
+                    {productosVenta.map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Unidad resultado</label>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                    value={cabecera.unidad_resultado}
+                    onChange={e => setCabecera({ ...cabecera, unidad_resultado: e.target.value })}
+                  >
+                    {unidades.map(u => (
+                      <option key={u.codigo} value={u.codigo}>{u.codigo} - {u.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cantidad resultado</label>
+                  <Input
+                    type="number"
+                    min={0.001}
+                    step={0.001}
+                    value={cabecera.cantidad_resultado}
+                    onChange={e => setCabecera({
+                      ...cabecera,
+                      cantidad_resultado: Number(e.target.value) || 1,
+                    })}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-sm font-medium">Descripción</label>
+                  <Input
+                    value={cabecera.descripcion}
+                    onChange={e => setCabecera({ ...cabecera, descripcion: e.target.value })}
+                    placeholder="Descripción opcional"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="es_subreceta"
+                    checked={cabecera.es_subreceta}
+                    onChange={e => setCabecera({ ...cabecera, es_subreceta: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  <label htmlFor="es_subreceta" className="text-sm">
+                    Es sub-receta (puede usarse como componente en otros escandallos)
+                  </label>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Líneas */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Ingredientes / Componentes</CardTitle>
+                <Button variant="outline" size="sm" onClick={addLinea}>
+                  <Plus className="h-4 w-4 mr-1" /> Añadir línea
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {lineas.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No hay ingredientes. Pulsa &quot;Añadir línea&quot; para empezar.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="p-2 w-8"></th>
+                        <th className="p-2 text-left">Componente</th>
+                        <th className="p-2 text-right">Cantidad</th>
+                        <th className="p-2 text-left">Unidad</th>
+                        <th className="p-2 text-right">Merma %</th>
+                        <th className="p-2 text-right">Coste/ud</th>
+                        <th className="p-2 text-right">Coste línea</th>
+                        <th className="p-2 w-24"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineas.map((linea, idx) => {
+                        const resolved = resolveComponente(linea)
+                        const costeLinea = calcCosteLinea(linea)
+
+                        return (
+                          <tr key={linea.key} className="border-b hover:bg-muted/30">
+                            {/* Drag handle */}
+                            <td className="p-2 text-muted-foreground">
+                              <div className="flex flex-col">
+                                <button
+                                  onClick={() => moveLinea(linea.key, 'up')}
+                                  disabled={idx === 0}
+                                  className="hover:text-foreground disabled:opacity-20"
+                                >
+                                  <ChevronUp className="h-3 w-3" />
+                                </button>
+                                <button
+                                  onClick={() => moveLinea(linea.key, 'down')}
+                                  disabled={idx === lineas.length - 1}
+                                  className="hover:text-foreground disabled:opacity-20"
+                                >
+                                  <ChevronDown className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* Component selector */}
+                            <td className="p-2 relative">
+                              <button
+                                onClick={() => {
+                                  setSelectorOpen(selectorOpen === idx ? null : idx)
+                                  setSelectorSearch('')
+                                }}
+                                className="text-left w-full h-8 px-2 border rounded text-sm hover:bg-muted/50 truncate"
+                              >
+                                {resolved.nombre}
+                              </button>
+
+                              {selectorOpen === idx && (
+                                <div className="absolute z-50 top-full left-2 mt-1 w-80 bg-popover border rounded-lg shadow-lg p-2">
+                                  <Input
+                                    autoFocus
+                                    placeholder="Buscar componente..."
+                                    value={selectorSearch}
+                                    onChange={e => setSelectorSearch(e.target.value)}
+                                    className="h-8 mb-2"
+                                  />
+                                  <div className="max-h-60 overflow-y-auto space-y-1">
+                                    {filteredProductos.length > 0 && (
+                                      <div>
+                                        <div className="text-xs font-medium text-muted-foreground px-2 py-1">
+                                          Productos de compra
+                                        </div>
+                                        {filteredProductos.map(p => (
+                                          <button
+                                            key={`p-${p.id}`}
+                                            onClick={() => selectComponente(linea.key, 'producto', p.id)}
+                                            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted truncate"
+                                          >
+                                            {p.nombre}
+                                            {p.precio_compra != null && (
+                                              <span className="text-muted-foreground ml-2">
+                                                {formatCurrency(p.precio_compra)}/ud
+                                              </span>
+                                            )}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {filteredSubrecetas.length > 0 && (
+                                      <div>
+                                        <div className="text-xs font-medium text-purple-600 px-2 py-1">
+                                          Sub-recetas
+                                        </div>
+                                        {filteredSubrecetas.map(s => (
+                                          <button
+                                            key={`s-${s.id}`}
+                                            onClick={() => selectComponente(linea.key, 'subreceta', s.id)}
+                                            className="w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted truncate"
+                                          >
+                                            SUB: {s.nombre}
+                                            <span className="text-muted-foreground ml-2">
+                                              {formatCurrency(s.coste_por_unidad)}/{s.unidad_resultado}
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -373,7 +626,7 @@ _BÙ[\YÛÛ\K[ÝOOH	
                               <Input
                                 type="number"
                                 min={0}
-                                step={0.001}
+                                   step={0.001}
                                 value={linea.cantidad_bruta || ''}
                                 onChange={e => updateLinea(linea.key, {
                                   cantidad_bruta: Number(e.target.value) || 0,
@@ -387,7 +640,7 @@ _BÙ[\YÛÛ\K[ÝOOH	
                               <select
                                 value={linea.unidad}
                                 onChange={e => updateLinea(linea.key, { unidad: e.target.value })}
-                                className="w-full h-8 rounded-md border bg-background px-2 text-sm"
+                                className="h-8 rounded border border-input bg-transparent px-2 text-sm"
                               >
                                 {unidades.map(u => (
                                   <option key={u.codigo} value={u.codigo}>{u.codigo}</option>
@@ -395,56 +648,43 @@ _BÙ[\YÛÛ\K[ÝOOH	
                               </select>
                             </td>
 
-                            {/* Merma */}
+                            {/* Merma % */}
                             <td className="p-2">
                               <Input
                                 type="number"
                                 min={0}
                                 max={100}
-                                step={0.5}
+                                step={0.1}
                                 value={linea.merma_pct || ''}
                                 onChange={e => updateLinea(linea.key, {
                                   merma_pct: Number(e.target.value) || 0,
                                 })}
-                                className="h-8 text-right text-sm"
+                                className="h-8 text-right text-sm w-20"
                               />
                             </td>
 
                             {/* Coste unitario */}
-                            <td className="p-2">
-                              <div className="relative">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  step={0.01}
-                                  value={linea.coste_override ?? ''}
-                                  onChange={e => updateLinea(linea.key, {
-                                    coste_override: e.target.value ? Number(e.target.value) : null,
-                                  })}
-                                  placeholder={formatNumber(comp.coste)}
-                                  className="h-8 text-right text-sm"
-                                  title={linea.coste_override != null
-                                    ? 'Override manual (borra para usar precio del maestro)'
-                                    : `Precio del maestro: ${formatCurrency(comp.coste)}`}
-                                />
-                              </div>
+                            <td className="p-2 text-right font-mono text-muted-foreground">
+                              {formatCurrency(resolved.coste)}
                             </td>
 
-                            {/* Coste lÃ­nea (calculated) */}
+                            {/* Coste línea */}
                             <td className="p-2 text-right font-mono font-medium">
-                              {formatCurrency(costeLine)}
+                              {formatCurrency(costeLinea)}
                             </td>
 
-                            {/* Delete */}
-                            <td className="p-2 text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeLinea(linea.key)}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <Trash2 size={14} />
-                              </Button>
+                            {/* Actions */}
+                            <td className="p-2">
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  onClick={() => removeLinea(linea.key)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         )
@@ -475,74 +715,44 @@ _BÙ[\YÛÛ\K[ÝOOH	
               <CardTitle className="text-base">Resumen de coste</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Coste total</span>
-                  <span className="font-mono font-bold text-lg">
-                    {formatCurrency(costeTotal)}
-                  </span>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Líneas</span>
+                  <span>{lineas.length}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Coste por {cabecera.unidad_resultado}
-                  </span>
-                  <span className="font-mono font-bold text-lg">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Coste total</span>
+                  <span className="font-mono font-medium">{formatCurrency(costeTotal)}</span>
+                </div>
+                <div className="border-t pt-2 flex justify-between">
+                  <span className="font-medium">Coste / {cabecera.unidad_resultado}</span>
+                  <span className="font-mono text-lg font-bold text-primary">
                     {formatCurrency(costePorUnidad)}
                   </span>
                 </div>
-                <div className="border-t pt-3">
-                  <span className="text-sm text-muted-foreground block mb-1">
-                    Resultado: {formatNumber(cabecera.cantidad_resultado)} {cabecera.unidad_resultado}
-                  </span>
-                </div>
               </div>
 
-              {/* Breakdown by line */}
-              {lineas.length > 0 && (
-                <div className="border-t pt-3">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">
-                    Desglose por componente
-                  </p>
-                  <div className="space-y-1.5">
-                    {lineas
-                      .filter(l => l.componente_producto_id || l.componente_escandallo_id)
-                      .map(l => {
-                        const comp = resolveComponente(l)
-                        const cost = calcCosteLinea(l)
-                        const pct = costeTotal > 0 ? (cost / costeTotal) * 100 : 0
-
-                        return (
-                          <div key={l.key} className="flex items-center gap-2">
-                            <div
-                              className="h-2 rounded-full bg-blue-500"
-                              style={{ width: `${Math.max(pct, 2)}%`, minWidth: 4, maxWidth: '40%' }}
-                            />
-                            <span className="text-xs truncate flex-1">{comp.nombre}</span>
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {pct.toFixed(0)}%
-                            </span>
-                          </div>
-                        )
-                      })}
-                  </div>
+              {cabecera.cantidad_resultado > 1 && (
+                <div className="text-xs text-muted-foreground">
+                  Para {formatNumber(cabecera.cantidad_resultado)} {cabecera.unidad_resultado}
                 </div>
               )}
+            </CardContent>
+          </Card>
 
-              {/* Line count summary */}
-              <div className="border-t pt-3 text-xs text-muted-foreground space-y-1">
-                <div className="flex justify-between">
-                  <span>Ingredientes</span>
-                  <span>{lineas.filter(l => l.componente_producto_id).length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Sub-recetas</span>
-                  <span>{lineas.filter(l => l.componente_escandallo_id).length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Total lÃ­neas</span>
-                  <span>{lineas.length}</span>
-                </div>
-              </div>
+          {/* Notas */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Notas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <textarea
+                value={cabecera.notas}
+                onChange={e => setCabecera({ ...cabecera, notas: e.target.value })}
+                placeholder="Notas internas..."
+                rows={4}
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm resize-none"
+              />
             </CardContent>
           </Card>
         </div>
