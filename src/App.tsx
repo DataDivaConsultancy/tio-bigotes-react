@@ -20,6 +20,9 @@ import Auditoria from '@/pages/Auditoria'
 import Proveedores from '@/pages/compras/Proveedores'
 // ProductosCompra eliminado — unificado en Productos
 import Locales from '@/pages/compras/Locales'
+import Escandallos from '@/pages/Escandallos'
+import EditorEscandallo from '@/pages/EditorEscandallo'
+import PreciosVenta from '@/pages/PreciosVenta'
 import Stock from '@/pages/compras/Stock'
 // Módulo de Compras v2 (MVP1)
 import ComprasDashboard from '@/pages/compras/Dashboard'
@@ -61,6 +64,30 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="Productos">
               <Productos />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/escandallos"
+          element={
+            <ProtectedRoute screen="Escandallos">
+              <Escandallos />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/escandallos/:id"
+          element={
+            <ProtectedRoute screen="Escandallos">
+              <EditorEscandallo />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/precios"
+          element={
+            <ProtectedRoute screen="Precios">
+              <PreciosVenta />
             </ProtectedRoute>
           }
         />
