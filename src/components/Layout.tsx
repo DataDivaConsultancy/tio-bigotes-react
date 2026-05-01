@@ -11,7 +11,7 @@ import {
   Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
   LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database, Settings,
   WifiOff, RefreshCw, CloudOff, Wifi, BookOpen, DollarSign,
-  Calculator,
+  Calculator, Link2,
 } from 'lucide-react'
 
 interface NavItem {
