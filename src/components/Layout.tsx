@@ -12,7 +12,7 @@ import {
   Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
   LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database, Settings,
   WifiOff, RefreshCw, CloudOff, Wifi, BookOpen, DollarSign,
-  Calculator, Link2, Receipt,
+  Calculator, Link2, Receipt, FolderTree,
 } from 'lucide-react'
 
 interface NavItem {
@@ -29,6 +29,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { key: 'Home', label: 'Inicio (BI)', icon: BarChart3, path: '/' },
   { key: 'Productos', label: 'Productos', icon: Package, path: '/productos', section: 'Gestión' },
+  { key: 'Productos', label: 'Categorías', icon: FolderTree, path: '/categorias' },
   { key: 'Escandallos', label: 'Escandallos', icon: BookOpen, path: '/escandallos' },
   { key: 'Escandallos', label: 'Simulador', icon: Calculator, path: '/escandallos/simulador' },
   { key: 'Escandallos', label: 'Dashboard márgenes', icon: BarChart3, path: '/escandallos/dashboard' },
