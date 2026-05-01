@@ -67,6 +67,15 @@ export default function MapeoVentas() {
 
   useEffect(() => { void loadAll() }, [])
 
+  async function reloadProductos() {
+    const r = await supabase
+      .from('productos_v2')
+      .select('id, nombre, codigo, tipo')
+      .eq('activo', true)
+      .order('nombre')
+    if (r.data) setProductos(r.data)
+  }
+
   async function loadAll() {
     setLoading(true)
     setErrorMsg(null)
@@ -343,6 +352,7 @@ export default function MapeoVentas() {
           onSelectChange={(alias, pid) => setSelecciones(prev => ({ ...prev, [alias]: pid }))}
           onAplicar={aplicarMapeo}
           onLoadSugerencia={loadSugerencia}
+          onReloadProductos={reloadProductos}
         />
       ) : (
         <ActivosList
@@ -360,6 +370,7 @@ export default function MapeoVentas() {
 function PendientesList({
   pendientes, sugerencias, selecciones, aplicando, productos,
   colorConfianza, onSelectChange, onAplicar, onLoadSugerencia,
+  onReloadProductos,
 }: {
   pendientes: AliasPendiente[]
   sugerencias: Record<string, Sugerencia[]>
@@ -370,6 +381,7 @@ function PendientesList({
   onSelectChange: (alias: string, pid: number | null) => void
   onAplicar: (alias: string) => void
   onLoadSugerencia: (alias: string) => void
+  onReloadProductos: () => void
 }) {
   if (pendientes.length === 0) {
     return (
@@ -435,6 +447,7 @@ function PendientesList({
                           <select
                             value={seleccionado ?? ''}
                             onChange={e => onSelectChange(p.alias_tpv, e.target.value ? Number(e.target.value) : null)}
+                            onFocus={onReloadProductos}
                             className="w-full h-8 rounded-md border bg-background px-2 text-xs"
                           >
                             <option value="">— Elegir producto destino —</option>
