@@ -650,14 +650,14 @@ export default function DetalleFactura() {
                 <label className="cursor-pointer">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,application/pdf,.pdf"
                     onChange={e => e.target.files?.[0] && handleFotoUpload(e.target.files[0])}
                     className="hidden"
                   />
                   <Button variant="outline" size="sm" disabled={uploadingFoto || ocrLoading} asChild>
                     <span>
                       <Camera size={12} className="mr-1" />
-                      {uploadingFoto ? 'Subiendo...' : (cab.foto_url ? 'Cambiar foto' : 'Adjuntar foto')}
+                      {uploadingFoto ? 'Subiendo...' : (cab.foto_url ? 'Cambiar archivo' : 'Adjuntar foto/PDF')}
                     </span>
                   </Button>
                 </label>
