@@ -141,6 +141,8 @@ export default function MapeoVentas() {
     // Quitar de pendientes optimisticamente
     setPendientes(prev => prev.filter(p => p.alias_tpv !== alias))
     setAplicando(prev => ({ ...prev, [alias]: false }))
+    // Refrescar la materialized view (no bloqueante; en backend tarda ~5s)
+    void supabase.rpc('rpc_refresh_alias_pendientes')
     // Refrescar activos
     const { data: actData } = await supabase.from('vw_alias_activos').select('*').order('n_ventas_mapeadas', { ascending: false })
     if (actData) setActivos(actData as AliasActivo[])
@@ -170,6 +172,8 @@ export default function MapeoVentas() {
       else okCount++
     }
     alert(`Aplicados: ${okCount} · Errores: ${errCount}`)
+    // Refrescar materialized view antes del reload final
+    await supabase.rpc('rpc_refresh_alias_pendientes')
     await loadAll()
   }
 
@@ -179,6 +183,7 @@ export default function MapeoVentas() {
     if (error) { alert(`Error: ${error.message}`); return }
     if (data?.error) { alert(`Error: ${data.error}`); return }
     alert(`OK. ${data?.ventas_revertidas ?? 0} ventas revertidas a sin_match.`)
+    await supabase.rpc('rpc_refresh_alias_pendientes')
     await loadAll()
   }
 
@@ -225,6 +230,9 @@ export default function MapeoVentas() {
           </h1>
           <p className="text-sm text-muted-foreground">
             Asociá los nombres del CSV de ventas con tus productos canónicos.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            ℹ️ Mapear un alias con muchas ventas (ej. 28k filas) puede tardar ~5-10s. La pantalla se actualiza al instante; los datos se sincronizan en segundo plano.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={loadAll}>
