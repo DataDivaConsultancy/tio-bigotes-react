@@ -610,15 +610,18 @@ interface AliasActivoRow {
   alias_tpv: string
   n_ventas_mapeadas: number | null
 }
-interface AliasPendienteRow {
+interface AliasCandidatoRow {
   alias_tpv: string
   n_ventas: number
   importe_total: number | null
+  origen: 'pendiente' | 'asignado_otro'
+  producto_origen_id: number | null
+  producto_origen_nombre: string | null
 }
 
 function AliasTpvSection({ productoId, productoNombre }: { productoId: number; productoNombre: string }) {
   const [aliases, setAliases] = useState<AliasActivoRow[]>([])
-  const [pendientes, setPendientes] = useState<AliasPendienteRow[]>([])
+  const [candidatos, setCandidatos] = useState<AliasCandidatoRow[]>([])
   const [loading, setLoading] = useState(true)
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -629,7 +632,7 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
 
   async function loadAll() {
     setLoading(true)
-    const [actRes, pendRes] = await Promise.all([
+    const [actRes, pendRes, otrosRes] = await Promise.all([
       supabase
         .from('vw_alias_activos')
         .select('alias_id, alias_tpv, n_ventas_mapeadas')
@@ -639,6 +642,11 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
         .from('vw_alias_pendientes')
         .select('alias_tpv, n_ventas, importe_total')
         .order('n_ventas', { ascending: false }),
+      supabase
+        .from('vw_alias_activos')
+        .select('alias_tpv, producto_id, producto_nombre, n_ventas_mapeadas')
+        .neq('producto_id', productoId)
+        .order('n_ventas_mapeadas', { ascending: false, nullsFirst: false }),
     ])
     if (actRes.data) {
       setAliases(actRes.data.map((d: any) => ({
@@ -647,9 +655,28 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
         n_ventas_mapeadas: d.n_ventas_mapeadas,
       })))
     }
+    const candidatos: AliasCandidatoRow[] = []
     if (pendRes.data) {
-      setPendientes(pendRes.data as AliasPendienteRow[])
+      ;(pendRes.data as any[]).forEach(d => candidatos.push({
+        alias_tpv: d.alias_tpv,
+        n_ventas: d.n_ventas,
+        importe_total: d.importe_total,
+        origen: 'pendiente',
+        producto_origen_id: null,
+        producto_origen_nombre: null,
+      }))
     }
+    if (otrosRes.data) {
+      ;(otrosRes.data as any[]).forEach(d => candidatos.push({
+        alias_tpv: d.alias_tpv,
+        n_ventas: d.n_ventas_mapeadas ?? 0,
+        importe_total: null,
+        origen: 'asignado_otro',
+        producto_origen_id: d.producto_id,
+        producto_origen_nombre: d.producto_nombre,
+      }))
+    }
+    setCandidatos(candidatos)
     setSeleccionados(new Set())
     setLoading(false)
   }
@@ -677,12 +704,11 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
     return 0
   }
 
-  // Pendientes ordenados por similitud al nombre del producto.
-  // Excluimos los que coinciden EXACTO con el nombre del producto:
-  // ya hay match directo automatico, no se necesita alias.
-  const pendientesOrdenados = useMemo(() => {
+  // Candidatos ordenados: pendientes + asignados a otros productos.
+  // Excluimos los que coinciden EXACTO con el nombre del producto.
+  const candidatosOrdenados = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return pendientes
+    return candidatos
       .filter(p => p.alias_tpv !== productoNombre)
       .map(p => ({
         ...p,
@@ -693,12 +719,12 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
         if (b.score !== a.score) return b.score - a.score
         return b.n_ventas - a.n_ventas
       })
-  }, [pendientes, productoNombre, search])
+  }, [candidatos, productoNombre, search])
 
-  // Pendiente que coincide EXACTO con el nombre del producto: caso especial
+  // Pendiente que coincide EXACTO con el nombre del producto
   const matchExactoPendiente = useMemo(
-    () => pendientes.find(p => p.alias_tpv === productoNombre),
-    [pendientes, productoNombre]
+    () => candidatos.find(p => p.alias_tpv === productoNombre && p.origen === 'pendiente'),
+    [candidatos, productoNombre]
   )
 
   function toggle(alias: string) {
@@ -713,8 +739,27 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
   async function asociarSeleccionados() {
     const lista = Array.from(seleccionados)
     if (lista.length === 0) return
+
+    // Si alguno está asignado a otro producto, confirmar reasignación
+    const reasignaciones = lista.filter(alias => {
+      const c = candidatos.find(c => c.alias_tpv === alias)
+      return c && c.origen === 'asignado_otro'
+    })
+    if (reasignaciones.length > 0) {
+      const detalle = reasignaciones.slice(0, 5).map(alias => {
+        const c = candidatos.find(c => c.alias_tpv === alias)
+        return `  • '${alias}' está hoy en '${c?.producto_origen_nombre}'`
+      }).join('\n')
+      if (!confirm(
+        `Vas a REASIGNAR ${reasignaciones.length} alias desde otro(s) producto(s):\n\n${detalle}${reasignaciones.length > 5 ? '\n  ...' : ''}\n\nLas ventas históricas se moverán al producto actual. ¿Continuar?`
+      )) {
+        return
+      }
+    }
+
     setWorking(true)
     let okCount = 0
+    let movedCount = 0
     let errMsg = ''
     for (const alias of lista) {
       const { data, error } = await supabase.rpc('rpc_crear_alias_y_reprocesar', {
@@ -725,11 +770,10 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
       if (error) { errMsg = error.message; break }
       if (data?.error) { errMsg = data.error; break }
       okCount++
+      if (data?.reasignado) movedCount++
     }
     if (errMsg) {
       alert(`Asociados: ${okCount}/${lista.length}. Error: ${errMsg}`)
-    } else if (okCount > 0) {
-      // No mostramos alert - el chip aparece y eso comunica
     }
     void supabase.rpc('rpc_refresh_alias_pendientes')
     setShowPicker(false)
@@ -833,14 +877,14 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
               size="sm"
               variant="outline"
               onClick={() => setShowPicker(true)}
-              disabled={pendientes.filter(p => p.alias_tpv !== productoNombre).length === 0}
+              disabled={candidatos.filter(p => p.alias_tpv !== productoNombre).length === 0}
             >
               <Plus size={12} className="mr-1" />
               {(() => {
-                const realCount = pendientes.filter(p => p.alias_tpv !== productoNombre).length
+                const realCount = candidatos.filter(p => p.alias_tpv !== productoNombre).length
                 return realCount === 0
-                  ? 'No hay alias pendientes distintos al nombre del producto'
-                  : `Asociar alias TPV (${realCount} pendientes)`
+                  ? 'No hay aliases para asociar'
+                  : `Asociar alias TPV (${realCount} disponibles)`
               })()}
             </Button>
           ) : (
@@ -861,12 +905,12 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
               <div className="max-h-72 overflow-y-auto border rounded bg-background">
                 <table className="w-full text-sm">
                   <tbody>
-                    {pendientesOrdenados.length === 0 ? (
+                    {candidatosOrdenados.length === 0 ? (
                       <tr><td colSpan={3} className="p-3 text-center text-xs text-muted-foreground">
                         No hay coincidencias
                       </td></tr>
                     ) : (
-                      pendientesOrdenados.map(p => (
+                      candidatosOrdenados.map(p => (
                         <tr
                           key={p.alias_tpv}
                           className={`border-b last:border-0 cursor-pointer hover:bg-muted/30 ${seleccionados.has(p.alias_tpv) ? 'bg-blue-500/5' : ''}`}
@@ -882,12 +926,24 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
                             />
                           </td>
                           <td className="p-2 font-mono text-xs">
-                            {p.alias_tpv}
-                            {p.score >= 40 && (
-                              <span className={`ml-2 text-[10px] ${colorScore(p.score)}`}>
-                                ✨ {p.score >= 80 ? 'alta similitud' : 'similitud media'}
-                              </span>
-                            )}
+                            <div>{p.alias_tpv}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {p.score >= 40 && (
+                                <span className={`text-[10px] ${colorScore(p.score)}`}>
+                                  ✨ {p.score >= 80 ? 'alta similitud' : 'similitud media'}
+                                </span>
+                              )}
+                              {p.origen === 'asignado_otro' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600" title="Click para reasignar a este producto">
+                                  Asignado a: {p.producto_origen_nombre} → reasignar
+                                </span>
+                              )}
+                              {p.origen === 'pendiente' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
+                                  pendiente
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-2 text-right text-xs text-muted-foreground">
                             {p.n_ventas} ventas
