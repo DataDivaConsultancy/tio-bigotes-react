@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -571,59 +571,129 @@ export default function Productos() {
     </div>
   )
 }
-
 /* ═══════════════════════════════════════════════════════════
    Sub-componente: gestión de Aliases TPV de un producto
    ═══════════════════════════════════════════════════════════ */
-interface AliasRow {
+interface AliasActivoRow {
   id: number
   alias_tpv: string
   n_ventas_mapeadas: number | null
 }
+interface AliasPendienteRow {
+  alias_tpv: string
+  n_ventas: number
+  importe_total: number | null
+}
 
 function AliasTpvSection({ productoId, productoNombre }: { productoId: number; productoNombre: string }) {
-  const [aliases, setAliases] = useState<AliasRow[]>([])
+  const [aliases, setAliases] = useState<AliasActivoRow[]>([])
+  const [pendientes, setPendientes] = useState<AliasPendienteRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [nuevoAlias, setNuevoAlias] = useState('')
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
   const [working, setWorking] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
 
-  useEffect(() => { void loadAliases() }, [productoId])
+  useEffect(() => { void loadAll() }, [productoId])
 
-  async function loadAliases() {
+  async function loadAll() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('vw_alias_activos')
-      .select('alias_id, alias_tpv, n_ventas_mapeadas')
-      .eq('producto_id', productoId)
-      .order('n_ventas_mapeadas', { ascending: false, nullsFirst: false })
-    if (!error && data) {
-      setAliases(data.map((d: any) => ({
+    const [actRes, pendRes] = await Promise.all([
+      supabase
+        .from('vw_alias_activos')
+        .select('alias_id, alias_tpv, n_ventas_mapeadas')
+        .eq('producto_id', productoId)
+        .order('n_ventas_mapeadas', { ascending: false, nullsFirst: false }),
+      supabase
+        .from('vw_alias_pendientes')
+        .select('alias_tpv, n_ventas, importe_total')
+        .order('n_ventas', { ascending: false }),
+    ])
+    if (actRes.data) {
+      setAliases(actRes.data.map((d: any) => ({
         id: d.alias_id,
         alias_tpv: d.alias_tpv,
         n_ventas_mapeadas: d.n_ventas_mapeadas,
       })))
     }
+    if (pendRes.data) {
+      setPendientes(pendRes.data as AliasPendienteRow[])
+    }
+    setSeleccionados(new Set())
     setLoading(false)
   }
 
-  async function agregar() {
-    const alias = nuevoAlias.trim()
-    if (!alias) return
-    setWorking(true)
-    const { data, error } = await supabase.rpc('rpc_crear_alias_y_reprocesar', {
-      p_alias_tpv: alias,
-      p_producto_id: productoId,
-      p_notas: null,
+  // Normaliza para comparar similitud: quita acentos, números prefijo, puntuación
+  function norm(s: string): string {
+    return s.toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/^\s*\d+\s*[\.\-:]?\s*/, '')
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function similarityScore(alias: string, producto: string): number {
+    const a = norm(alias)
+    const p = norm(producto)
+    if (a === p) return 100
+    if (a.includes(p) || p.includes(a)) return 80
+    // Palabras compartidas
+    const aWords = new Set(a.split(' ').filter(w => w.length >= 3))
+    const pWords = p.split(' ').filter(w => w.length >= 3)
+    const shared = pWords.filter(w => aWords.has(w)).length
+    if (shared > 0 && pWords.length > 0) return Math.round((shared / pWords.length) * 60)
+    return 0
+  }
+
+  // Pendientes ordenados por similitud al nombre del producto
+  const pendientesOrdenados = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    return pendientes
+      .map(p => ({
+        ...p,
+        score: similarityScore(p.alias_tpv, productoNombre),
+      }))
+      .filter(p => !q || p.alias_tpv.toLowerCase().includes(q))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        return b.n_ventas - a.n_ventas
+      })
+  }, [pendientes, productoNombre, search])
+
+  function toggle(alias: string) {
+    setSeleccionados(prev => {
+      const next = new Set(prev)
+      if (next.has(alias)) next.delete(alias)
+      else next.add(alias)
+      return next
     })
-    if (error) { alert(`Error: ${error.message}`); setWorking(false); return }
-    if (data?.error) { alert(`Error: ${data.error}`); setWorking(false); return }
-    setNuevoAlias('')
-    void supabase.rpc('rpc_refresh_alias_pendientes')
-    await loadAliases()
-    if (data?.ventas_actualizadas > 0) {
-      // No hacemos alert para no interrumpir flujo, solo log
-      console.log(`Alias creado, ${data.ventas_actualizadas} ventas históricas reasignadas`)
+  }
+
+  async function asociarSeleccionados() {
+    const lista = Array.from(seleccionados)
+    if (lista.length === 0) return
+    setWorking(true)
+    let okCount = 0
+    let errMsg = ''
+    for (const alias of lista) {
+      const { data, error } = await supabase.rpc('rpc_crear_alias_y_reprocesar', {
+        p_alias_tpv: alias,
+        p_producto_id: productoId,
+        p_notas: null,
+      })
+      if (error) { errMsg = error.message; break }
+      if (data?.error) { errMsg = data.error; break }
+      okCount++
     }
+    if (errMsg) {
+      alert(`Asociados: ${okCount}/${lista.length}. Error: ${errMsg}`)
+    } else if (okCount > 0) {
+      // No mostramos alert - el chip aparece y eso comunica
+    }
+    void supabase.rpc('rpc_refresh_alias_pendientes')
+    setShowPicker(false)
+    await loadAll()
     setWorking(false)
   }
 
@@ -634,12 +704,15 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
     if (error) { alert(`Error: ${error.message}`); setWorking(false); return }
     if (data?.error) { alert(`Error: ${data.error}`); setWorking(false); return }
     void supabase.rpc('rpc_refresh_alias_pendientes')
-    await loadAliases()
+    await loadAll()
     setWorking(false)
   }
 
-  // Sugerir el nombre canónico del producto como punto de partida (ej. "1.CARNE SUAVE")
-  const sugerencia = productoNombre
+  function colorScore(score: number) {
+    if (score >= 80) return 'text-green-500'
+    if (score >= 40) return 'text-yellow-500'
+    return 'text-muted-foreground'
+  }
 
   return (
     <div className="space-y-2 pt-3 border-t">
@@ -655,58 +728,126 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
       {loading ? (
         <div className="text-xs text-muted-foreground">Cargando...</div>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {aliases.length === 0 ? (
-            <span className="text-xs text-muted-foreground italic">
-              Sin aliases TPV. Si el TPV emite ventas con un nombre distinto al canónico, agregalo abajo.
-            </span>
-          ) : (
-            aliases.map(a => (
-              <span
-                key={a.id}
-                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 text-xs font-mono"
-              >
-                {a.alias_tpv}
-                {a.n_ventas_mapeadas != null && a.n_ventas_mapeadas > 0 && (
-                  <span className="text-[10px] opacity-70">
-                    {a.n_ventas_mapeadas} ventas
-                  </span>
-                )}
-                <button
-                  onClick={() => eliminar(a.id, a.alias_tpv)}
-                  disabled={working}
-                  className="hover:text-red-500 transition"
-                  title="Eliminar alias"
-                >
-                  <X size={12} />
-                </button>
+        <>
+          {/* Chips de aliases ya asociados */}
+          <div className="flex flex-wrap gap-2 min-h-[28px]">
+            {aliases.length === 0 ? (
+              <span className="text-xs text-muted-foreground italic">
+                Sin aliases asociados todavía.
               </span>
-            ))
+            ) : (
+              aliases.map(a => (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 text-xs font-mono"
+                >
+                  {a.alias_tpv}
+                  {a.n_ventas_mapeadas != null && a.n_ventas_mapeadas > 0 && (
+                    <span className="text-[10px] opacity-70">
+                      {a.n_ventas_mapeadas} ventas
+                    </span>
+                  )}
+                  <button
+                    onClick={() => eliminar(a.id, a.alias_tpv)}
+                    disabled={working}
+                    className="hover:text-red-500 transition"
+                    title="Eliminar alias"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+
+          {/* Botón para abrir el picker */}
+          {!showPicker ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowPicker(true)}
+              disabled={pendientes.length === 0}
+            >
+              <Plus size={12} className="mr-1" />
+              {pendientes.length === 0
+                ? 'No hay alias pendientes para asociar'
+                : `Asociar alias TPV (${pendientes.length} pendientes)`}
+            </Button>
+          ) : (
+            <div className="border rounded-md p-3 space-y-2 bg-muted/20">
+              <div className="flex items-center justify-between gap-2">
+                <Input
+                  placeholder="Buscar entre los alias pendientes..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="text-sm h-8"
+                  autoFocus
+                />
+                <Button size="sm" variant="ghost" onClick={() => { setShowPicker(false); setSeleccionados(new Set()); setSearch('') }}>
+                  Cancelar
+                </Button>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto border rounded bg-background">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {pendientesOrdenados.length === 0 ? (
+                      <tr><td colSpan={3} className="p-3 text-center text-xs text-muted-foreground">
+                        No hay coincidencias
+                      </td></tr>
+                    ) : (
+                      pendientesOrdenados.map(p => (
+                        <tr
+                          key={p.alias_tpv}
+                          className={`border-b last:border-0 cursor-pointer hover:bg-muted/30 ${seleccionados.has(p.alias_tpv) ? 'bg-blue-500/5' : ''}`}
+                          onClick={() => toggle(p.alias_tpv)}
+                        >
+                          <td className="p-2 w-8">
+                            <input
+                              type="checkbox"
+                              checked={seleccionados.has(p.alias_tpv)}
+                              onChange={() => toggle(p.alias_tpv)}
+                              className="rounded"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
+                          <td className="p-2 font-mono text-xs">
+                            {p.alias_tpv}
+                            {p.score >= 40 && (
+                              <span className={`ml-2 text-[10px] ${colorScore(p.score)}`}>
+                                ✨ {p.score >= 80 ? 'alta similitud' : 'similitud media'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2 text-right text-xs text-muted-foreground">
+                            {p.n_ventas} ventas
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-muted-foreground">
+                  {seleccionados.size > 0 ? `${seleccionados.size} seleccionado${seleccionados.size === 1 ? '' : 's'}` : 'Click en una fila o checkbox para seleccionar'}
+                </span>
+                <Button
+                  size="sm"
+                  onClick={asociarSeleccionados}
+                  disabled={working || seleccionados.size === 0}
+                >
+                  {working ? 'Asociando...' : `Asociar ${seleccionados.size || ''} alias`}
+                </Button>
+              </div>
+            </div>
           )}
-        </div>
+        </>
       )}
 
-      <div className="flex gap-2 items-center">
-        <Input
-          value={nuevoAlias}
-          onChange={e => setNuevoAlias(e.target.value)}
-          placeholder={`Alias TPV (ej: ${sugerencia})`}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void agregar() } }}
-          className="text-sm font-mono"
-          disabled={working}
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={agregar}
-          disabled={working || !nuevoAlias.trim()}
-        >
-          <Plus size={12} className="mr-1" />
-          Agregar
-        </Button>
-      </div>
       <p className="text-[10px] text-muted-foreground">
-        Al agregar, las ventas históricas con ese nombre se reasignan a este producto automáticamente.
+        Al asociar un alias, las ventas históricas con ese nombre se reasignan a este producto automáticamente.
       </p>
     </div>
   )
