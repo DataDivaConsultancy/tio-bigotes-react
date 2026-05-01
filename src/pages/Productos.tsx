@@ -467,6 +467,9 @@ export default function Productos() {
               </div>
             )}
 
+            {/* Aliases TPV - solo al editar */}
+            {editing && <AliasTpvSection productoId={editing.id} productoNombre={editing.nombre} />}
+
             {/* Activo toggle + actions */}
             <div className="flex items-center justify-between pt-2">
               <div>
@@ -568,3 +571,144 @@ export default function Productos() {
     </div>
   )
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Sub-componente: gestión de Aliases TPV de un producto
+   ═══════════════════════════════════════════════════════════ */
+interface AliasRow {
+  id: number
+  alias_tpv: string
+  n_ventas_mapeadas: number | null
+}
+
+function AliasTpvSection({ productoId, productoNombre }: { productoId: number; productoNombre: string }) {
+  const [aliases, setAliases] = useState<AliasRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [nuevoAlias, setNuevoAlias] = useState('')
+  const [working, setWorking] = useState(false)
+
+  useEffect(() => { void loadAliases() }, [productoId])
+
+  async function loadAliases() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('vw_alias_activos')
+      .select('alias_id, alias_tpv, n_ventas_mapeadas')
+      .eq('producto_id', productoId)
+      .order('n_ventas_mapeadas', { ascending: false, nullsFirst: false })
+    if (!error && data) {
+      setAliases(data.map((d: any) => ({
+        id: d.alias_id,
+        alias_tpv: d.alias_tpv,
+        n_ventas_mapeadas: d.n_ventas_mapeadas,
+      })))
+    }
+    setLoading(false)
+  }
+
+  async function agregar() {
+    const alias = nuevoAlias.trim()
+    if (!alias) return
+    setWorking(true)
+    const { data, error } = await supabase.rpc('rpc_crear_alias_y_reprocesar', {
+      p_alias_tpv: alias,
+      p_producto_id: productoId,
+      p_notas: null,
+    })
+    if (error) { alert(`Error: ${error.message}`); setWorking(false); return }
+    if (data?.error) { alert(`Error: ${data.error}`); setWorking(false); return }
+    setNuevoAlias('')
+    void supabase.rpc('rpc_refresh_alias_pendientes')
+    await loadAliases()
+    if (data?.ventas_actualizadas > 0) {
+      // No hacemos alert para no interrumpir flujo, solo log
+      console.log(`Alias creado, ${data.ventas_actualizadas} ventas históricas reasignadas`)
+    }
+    setWorking(false)
+  }
+
+  async function eliminar(aliasId: number, aliasTpv: string) {
+    if (!confirm(`¿Eliminar el alias TPV "${aliasTpv}"?\n\nLas ventas históricas con este nombre quedarán sin mapear hasta que crees otro alias.`)) return
+    setWorking(true)
+    const { data, error } = await supabase.rpc('rpc_eliminar_alias_y_revertir', { p_alias_id: aliasId })
+    if (error) { alert(`Error: ${error.message}`); setWorking(false); return }
+    if (data?.error) { alert(`Error: ${data.error}`); setWorking(false); return }
+    void supabase.rpc('rpc_refresh_alias_pendientes')
+    await loadAliases()
+    setWorking(false)
+  }
+
+  // Sugerir el nombre canónico del producto como punto de partida (ej. "1.CARNE SUAVE")
+  const sugerencia = productoNombre
+
+  return (
+    <div className="space-y-2 pt-3 border-t">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Aliases TPV
+        </h3>
+        <span className="text-[10px] text-muted-foreground">
+          Nombres del CSV de ventas que apuntan a este producto
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="text-xs text-muted-foreground">Cargando...</div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {aliases.length === 0 ? (
+            <span className="text-xs text-muted-foreground italic">
+              Sin aliases TPV. Si el TPV emite ventas con un nombre distinto al canónico, agregalo abajo.
+            </span>
+          ) : (
+            aliases.map(a => (
+              <span
+                key={a.id}
+                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 text-xs font-mono"
+              >
+                {a.alias_tpv}
+                {a.n_ventas_mapeadas != null && a.n_ventas_mapeadas > 0 && (
+                  <span className="text-[10px] opacity-70">
+                    {a.n_ventas_mapeadas} ventas
+                  </span>
+                )}
+                <button
+                  onClick={() => eliminar(a.id, a.alias_tpv)}
+                  disabled={working}
+                  className="hover:text-red-500 transition"
+                  title="Eliminar alias"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-2 items-center">
+        <Input
+          value={nuevoAlias}
+          onChange={e => setNuevoAlias(e.target.value)}
+          placeholder={`Alias TPV (ej: ${sugerencia})`}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void agregar() } }}
+          className="text-sm font-mono"
+          disabled={working}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={agregar}
+          disabled={working || !nuevoAlias.trim()}
+        >
+          <Plus size={12} className="mr-1" />
+          Agregar
+        </Button>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Al agregar, las ventas históricas con ese nombre se reasignan a este producto automáticamente.
+      </p>
+    </div>
+  )
+}
+
