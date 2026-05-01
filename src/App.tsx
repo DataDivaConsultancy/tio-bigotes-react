@@ -40,6 +40,7 @@ import DetalleIncidencia from '@/pages/compras/incidencias/Detalle'
 // Fase 2 (placeholders)
 import ListaAlbaranes from '@/pages/compras/albaranes/Lista'
 import ListaFacturas from '@/pages/compras/facturas/Lista'
+import DetalleFactura from '@/pages/compras/facturas/Detalle'
 
 function AppRoutes() {
   const { user } = useAuth()
@@ -319,7 +320,23 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="FacturasCompra">
               <ListaFacturas />
+                    <Route
+          path="/compras/facturas/nueva"
+          element={
+            <ProtectedRoute screen="FacturasCompra">
+              <DetalleFactura />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/compras/facturas/:id"
+          element={
+            <ProtectedRoute screen="FacturasCompra">
+              <DetalleFactura />
+            </ProtectedRoute>
+          }
+        />
+        </ProtectedRoute>
           }
         />
       </Route>
