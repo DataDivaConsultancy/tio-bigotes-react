@@ -327,13 +327,11 @@ export default function BI() {
   }, [productosCat])
 
   function getCatId(v: VentaRow): number | null {
-    // IMPORTANTE: priorizamos match por NOMBRE.
-    // historial_ventas.producto_id viene de la tabla legacy `productos`
-    // mientras que vw_productos_dim usa IDs de `productos_v2`. Los IDs
-    // se solapan pero apuntan a productos distintos, así que el match
-    // por ID puede atribuir la venta a una categoría equivocada.
-    // El match por nombre es el único fiable mientras no se consoliden
-    // ambos catálogos.
+    // Priorizamos match por NOMBRE en vez de por ID.
+    // Las ventas vienen de ventas_raw_v2 (vista sobre tb_v2.ventas_staging)
+    // y los productos de vw_productos_dim. El match por nombre evita
+    // sorpresas si un producto se renombra o si un alias TPV nuevo
+    // todavía no tiene producto_id resuelto.
     const cByName = prodToCat.byName.get(v.producto.toLowerCase())
     if (cByName) return cByName
     if (v.producto_id) {
