@@ -11,7 +11,7 @@ import {
   Store, BoxesIcon, LogOut, Menu, X, ChevronRight, Home, KeyRound,
   LayoutDashboard, FileText, PackageCheck, AlertTriangle, Database, Settings,
   WifiOff, RefreshCw, CloudOff, Wifi, BookOpen, DollarSign,
-  Calculator, Link2,
+  Calculator, Link2, Receipt,
 } from 'lucide-react'
 
 interface NavItem {
@@ -47,6 +47,7 @@ const navItems: NavItem[] = [
   { key: 'Pedidos', label: 'Pedidos', icon: FileText, path: '/compras/pedidos' },
   { key: 'Recepciones', label: 'Recepciones', icon: PackageCheck, path: '/compras/recepciones' },
   { key: 'Incidencias', label: 'Incidencias', icon: AlertTriangle, path: '/compras/incidencias' },
+  { key: 'FacturasCompra', label: 'Facturas Compra', icon: Receipt, path: '/compras/facturas' },
   { key: 'Configuracion', label: 'Configuración', icon: Settings, path: '/configuracion', section: 'Sistema' },
 ]
 
