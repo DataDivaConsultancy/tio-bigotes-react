@@ -677,10 +677,13 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
     return 0
   }
 
-  // Pendientes ordenados por similitud al nombre del producto
+  // Pendientes ordenados por similitud al nombre del producto.
+  // Excluimos los que coinciden EXACTO con el nombre del producto:
+  // ya hay match directo automatico, no se necesita alias.
   const pendientesOrdenados = useMemo(() => {
     const q = search.toLowerCase().trim()
     return pendientes
+      .filter(p => p.alias_tpv !== productoNombre)
       .map(p => ({
         ...p,
         score: similarityScore(p.alias_tpv, productoNombre),
@@ -691,6 +694,12 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
         return b.n_ventas - a.n_ventas
       })
   }, [pendientes, productoNombre, search])
+
+  // Pendiente que coincide EXACTO con el nombre del producto: caso especial
+  const matchExactoPendiente = useMemo(
+    () => pendientes.find(p => p.alias_tpv === productoNombre),
+    [pendientes, productoNombre]
+  )
 
   function toggle(alias: string) {
     setSeleccionados(prev => {
@@ -791,18 +800,48 @@ function AliasTpvSection({ productoId, productoNombre }: { productoId: number; p
             )}
           </div>
 
+          {/* Aviso: si hay un alias pendiente con el mismo nombre que el producto,
+              significa que hay ventas en CSV con ese nombre exacto pero todavia
+              no se reasignaron al producto. Boton para reasignarlas. */}
+          {matchExactoPendiente && (
+            <div className="flex items-center justify-between gap-2 p-2 rounded border border-yellow-500/40 bg-yellow-500/5 text-xs">
+              <span>
+                <span className="text-yellow-600 font-medium">{matchExactoPendiente.n_ventas} ventas</span> con el nombre exacto <span className="font-mono">'{matchExactoPendiente.alias_tpv}'</span> aun sin asignar.
+              </span>
+              <Button
+                size="sm" variant="outline"
+                onClick={async () => {
+                  setWorking(true)
+                  await supabase.rpc('rpc_crear_alias_y_reprocesar', {
+                    p_alias_tpv: matchExactoPendiente.alias_tpv,
+                    p_producto_id: productoId,
+                    p_notas: null,
+                  })
+                  void supabase.rpc('rpc_refresh_alias_pendientes')
+                  await loadAll()
+                }}
+                disabled={working}
+              >
+                Reasignar
+              </Button>
+            </div>
+          )}
+
           {/* Botón para abrir el picker */}
           {!showPicker ? (
             <Button
               size="sm"
               variant="outline"
               onClick={() => setShowPicker(true)}
-              disabled={pendientes.length === 0}
+              disabled={pendientes.filter(p => p.alias_tpv !== productoNombre).length === 0}
             >
               <Plus size={12} className="mr-1" />
-              {pendientes.length === 0
-                ? 'No hay alias pendientes para asociar'
-                : `Asociar alias TPV (${pendientes.length} pendientes)`}
+              {(() => {
+                const realCount = pendientes.filter(p => p.alias_tpv !== productoNombre).length
+                return realCount === 0
+                  ? 'No hay alias pendientes distintos al nombre del producto'
+                  : `Asociar alias TPV (${realCount} pendientes)`
+              })()}
             </Button>
           ) : (
             <div className="border rounded-md p-3 space-y-2 bg-muted/20">
