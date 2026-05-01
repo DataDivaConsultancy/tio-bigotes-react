@@ -55,6 +55,7 @@ export default function MapeoVentas() {
   const [productos, setProductos] = useState<ProductoOption[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   // Sugerencias por alias_tpv (cache)
   const [sugerencias, setSugerencias] = useState<Record<string, Sugerencia[]>>({})
@@ -67,6 +68,7 @@ export default function MapeoVentas() {
 
   async function loadAll() {
     setLoading(true)
+    setErrorMsg(null)
     const [pendRes, actRes, prodRes] = await Promise.all([
       supabase.from('vw_alias_pendientes').select('*'),
       supabase.from('vw_alias_activos').select('*').order('n_ventas_mapeadas', { ascending: false }),
@@ -77,9 +79,17 @@ export default function MapeoVentas() {
         .eq('activo', true)
         .order('nombre'),
     ])
-    if (pendRes.data) setPendientes(pendRes.data as AliasPendiente[])
-    if (actRes.data) setActivos(actRes.data as AliasActivo[])
-    if (prodRes.data) setProductos(prodRes.data)
+    const errors: string[] = []
+    if (pendRes.error) errors.push(`vw_alias_pendientes: ${pendRes.error.message}`)
+    if (actRes.error)  errors.push(`vw_alias_activos: ${actRes.error.message}`)
+    if (prodRes.error) errors.push(`productos_v2: ${prodRes.error.message}`)
+    if (errors.length > 0) {
+      console.error('[MapeoVentas] errors:', errors)
+      setErrorMsg(errors.join(' | '))
+    }
+    setPendientes((pendRes.data ?? []) as AliasPendiente[])
+    setActivos((actRes.data ?? []) as AliasActivo[])
+    setProductos(prodRes.data ?? [])
     setLoading(false)
   }
 
@@ -221,6 +231,14 @@ export default function MapeoVentas() {
           <RefreshCw size={14} className="mr-1" /> Refrescar
         </Button>
       </div>
+
+      {errorMsg && (
+        <Card className="border-red-500/40 bg-red-500/5">
+          <CardContent className="p-3 text-sm text-red-500">
+            <strong>Error de carga:</strong> {errorMsg}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
