@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BoxesIcon, ArrowLeftRight, ClipboardCheck, History, Package, RefreshCw } from 'lucide-react'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import * as XLSX from 'xlsx'
+import { Download, Upload as UploadIcon, AlertTriangle, CheckCircle2 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +103,14 @@ export default function Stock() {
   // Tab 5 — Movimientos
   const [movimientos, setMovimientos] = useState<Movimiento[]>([])
 
+  // Importar Excel
+  const [importPreview, setImportPreview] = useState<{
+    rows: { producto_compra_id: number; local_id: number; producto_nombre: string; local_nombre: string; stock_actual: number; conteo_real: number; diff: number }[]
+    sin_match: { row: number; valor: string }[]
+    motivo: string
+  } | null>(null)
+  const [importing, setImporting] = useState(false)
+
   // ─── Load shared data (productos + locales) ─────────────────────────────
 
   useEffect(() => {
@@ -149,10 +159,149 @@ export default function Stock() {
 
   const totalCoste = filteredStock.reduce((sum, s) => sum + Number(s.stock_actual ?? 0) * Number(s.precio ?? 0), 0)
 
+  function descargarExcel() {
+    if (filteredStock.length === 0) {
+      alert('No hay stock para descargar')
+      return
+    }
+    const rows = filteredStock.map(s => ({
+      producto_compra_id: s.producto_compra_id,
+      local_id: (s as any).local_id ?? '',
+      producto: s.producto_nombre,
+      cod_interno: (s as any).cod_interno ?? '',
+      proveedor: s.proveedor_nombre ?? '',
+      local: s.local_nombre,
+      unidad: s.unidad_medida ?? '',
+      'stock_actual_BD': Number(s.stock_actual ?? 0),
+      'stock_real_contado': '',
+      'precio_coste': s.precio != null ? Number(s.precio) : '',
+      'valor_actual': s.precio != null ? Number(s.stock_actual ?? 0) * Number(s.precio) : '',
+      'ultimo_movimiento': (s as any).ultimo_movimiento ?? '',
+      'notas': '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    // Ancho de columnas
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 8 }, { wch: 35 }, { wch: 12 }, { wch: 18 },
+      { wch: 22 }, { wch: 8 }, { wch: 14 }, { wch: 18 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 25 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock')
+
+    // Hoja 2: instrucciones
+    const help = [
+      ['Instrucciones para regularizar stock'],
+      [''],
+      ['1. Hace el conteo físico de cada producto en cada local'],
+      ['2. Anota la cantidad real en la columna "stock_real_contado"'],
+      ['3. Las filas con diferencia respecto a stock_actual_BD se ajustan al subir'],
+      ['4. Las filas con la columna vacía o igual a stock_actual_BD NO se ajustan'],
+      ['5. NO modifiques las columnas "producto_compra_id", "local_id" - se usan para identificar'],
+      ['6. Para agregar stock nuevo a productos sin stock, dejá stock_actual_BD = 0 y poné el real'],
+      ['7. Para regularizar a 0, ponés 0 en stock_real_contado'],
+      [''],
+      ['Tipos de ajuste que se generan:'],
+      ['  - Diferencia positiva: tipo "ajuste_positivo"'],
+      ['  - Diferencia negativa: tipo "ajuste_negativo"'],
+      ['  - Diferencia 0 o columna vacía: NO se crea movimiento'],
+    ]
+    const ws2 = XLSX.utils.aoa_to_sheet(help)
+    ws2['!cols'] = [{ wch: 80 }]
+    XLSX.utils.book_append_sheet(wb, ws2, 'Instrucciones')
+
+    XLSX.writeFile(wb, `stock_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  async function handleSubirExcel(file: File) {
+    try {
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: 'array' })
+      const sheet = wb.Sheets[wb.SheetNames[0]]
+      const json = XLSX.utils.sheet_to_json<any>(sheet, { defval: '' })
+
+      // Cargar stock actual fresh para comparar
+      const { data: stockFresh } = await supabase.from('vw_stock_actual').select('*')
+      const stockMap = new Map<string, number>()
+      ;(stockFresh ?? []).forEach((r: any) => {
+        stockMap.set(`${r.producto_compra_id}|${r.local_id}`, Number(r.stock_actual ?? 0))
+      })
+
+      const rows: any[] = []
+      const sin_match: { row: number; valor: string }[] = []
+
+      json.forEach((r, idx) => {
+        const pid = Number(r.producto_compra_id)
+        const lid = Number(r.local_id)
+        const conteoStr = String(r.stock_real_contado ?? '').trim()
+
+        if (!pid || !lid) {
+          sin_match.push({ row: idx + 2, valor: 'falta producto_compra_id o local_id' })
+          return
+        }
+        if (conteoStr === '') return  // skip filas sin conteo
+
+        const conteo = Number(conteoStr.replace(',', '.'))
+        if (isNaN(conteo) || conteo < 0) {
+          sin_match.push({ row: idx + 2, valor: `stock_real_contado invalido: ${conteoStr}` })
+          return
+        }
+
+        const stockActual = stockMap.get(`${pid}|${lid}`)
+        if (stockActual == null) {
+          sin_match.push({ row: idx + 2, valor: `producto+local no existe en BD: ${pid}/${lid}` })
+          return
+        }
+
+        const diff = conteo - stockActual
+        if (Math.abs(diff) < 0.0001) return  // sin cambios
+
+        rows.push({
+          producto_compra_id: pid,
+          local_id: lid,
+          producto_nombre: r.producto ?? '?',
+          local_nombre: r.local ?? '?',
+          stock_actual: stockActual,
+          conteo_real: conteo,
+          diff,
+        })
+      })
+
+      setImportPreview({
+        rows,
+        sin_match,
+        motivo: `Regularización Excel ${new Date().toISOString().slice(0, 10)}`,
+      })
+    } catch (e: any) {
+      alert(`Error al leer el Excel: ${e.message}`)
+    }
+  }
+
+  async function confirmarImport() {
+    if (!importPreview) return
+    setImporting(true)
+    const ajustes = importPreview.rows.map(r => ({
+      producto_compra_id: r.producto_compra_id,
+      local_id: r.local_id,
+      conteo_real: r.conteo_real,
+      motivo: importPreview.motivo,
+    }))
+    const { data, error } = await supabase.rpc('rpc_regularizar_stock', { p_ajustes: ajustes })
+    if (error) {
+      alert(`Error: ${error.message}`)
+      setImporting(false)
+      return
+    }
+    alert(`✓ Aplicados ${data?.ajustes_aplicados ?? 0} ajustes`)
+    setImportPreview(null)
+    setImporting(false)
+    await loadStock()
+  }
+
   function renderStockActual() {
     return (
       <div className="space-y-4">
-        {/* Filter by local */}
+        {/* Filter by local + acciones Excel */}
         <div className="flex items-center gap-3 flex-wrap">
           <select
             className={`${selectClass} max-w-xs`}
@@ -167,7 +316,107 @@ export default function Stock() {
           <Button variant="outline" size="sm" onClick={loadStock} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Actualizar
           </Button>
+          <div className="ml-auto flex gap-2">
+            <Button variant="outline" size="sm" onClick={descargarExcel} disabled={filteredStock.length === 0}>
+              <Download size={14} className="mr-1" /> Descargar Excel
+            </Button>
+            <label className="cursor-pointer">
+              <input type="file" accept=".xlsx,.xls" className="hidden"
+                onChange={e => e.target.files?.[0] && handleSubirExcel(e.target.files[0])} />
+              <Button variant="outline" size="sm" asChild>
+                <span><UploadIcon size={14} className="mr-1" /> Subir Excel</span>
+              </Button>
+            </label>
+          </div>
         </div>
+
+        {/* Modal de preview import */}
+        {importPreview && (
+          <Card className="border-primary/40">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Preview regularización Excel</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setImportPreview(null)} disabled={importing}>
+                Cancelar
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded bg-blue-500/5 border border-blue-500/30">
+                  <div className="text-2xl font-bold">{importPreview.rows.length}</div>
+                  <p className="text-xs text-muted-foreground">Ajustes a aplicar</p>
+                </div>
+                <div className="p-3 rounded bg-green-500/5 border border-green-500/30">
+                  <div className="text-2xl font-bold text-green-600">
+                    {importPreview.rows.filter(r => r.diff > 0).length}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Subidas (entrada)</p>
+                </div>
+                <div className="p-3 rounded bg-red-500/5 border border-red-500/30">
+                  <div className="text-2xl font-bold text-red-600">
+                    {importPreview.rows.filter(r => r.diff < 0).length}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Bajadas (salida)</p>
+                </div>
+              </div>
+
+              {importPreview.sin_match.length > 0 && (
+                <div className="p-3 rounded bg-orange-500/5 border border-orange-500/30 text-xs space-y-1">
+                  <strong className="text-orange-600 flex items-center gap-1">
+                    <AlertTriangle size={12} /> {importPreview.sin_match.length} filas con problemas
+                  </strong>
+                  {importPreview.sin_match.slice(0, 5).map(s => (
+                    <div key={s.row}>Fila {s.row}: {s.valor}</div>
+                  ))}
+                  {importPreview.sin_match.length > 5 && <div>...y {importPreview.sin_match.length - 5} más</div>}
+                </div>
+              )}
+
+              {importPreview.rows.length > 0 && (
+                <div className="max-h-64 overflow-y-auto border rounded">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted/40">
+                      <tr>
+                        <th className="text-left p-2">Producto</th>
+                        <th className="text-left p-2">Local</th>
+                        <th className="text-right p-2">Stock BD</th>
+                        <th className="text-right p-2">Conteo real</th>
+                        <th className="text-right p-2">Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.rows.map((r, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="p-2">{r.producto_nombre}</td>
+                          <td className="p-2">{r.local_nombre}</td>
+                          <td className="p-2 text-right font-mono">{r.stock_actual}</td>
+                          <td className="p-2 text-right font-mono">{r.conteo_real}</td>
+                          <td className={`p-2 text-right font-mono font-semibold ${r.diff > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {r.diff > 0 ? '+' : ''}{r.diff}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-2 border-t">
+                <div className="text-xs text-muted-foreground">
+                  Motivo: <span className="font-mono">{importPreview.motivo}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setImportPreview(null)} disabled={importing}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={confirmarImport} disabled={importing || importPreview.rows.length === 0}>
+                    <CheckCircle2 size={14} className="mr-1" />
+                    {importing ? 'Aplicando...' : `Aplicar ${importPreview.rows.length} ajustes`}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-12">
