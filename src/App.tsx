@@ -22,6 +22,7 @@ import Proveedores from '@/pages/compras/Proveedores'
 import Locales from '@/pages/compras/Locales'
 import Escandallos from '@/pages/Escandallos'
 import EditorEscandallo from '@/pages/EditorEscandallo'
+import SimuladorEscandallo from '@/pages/SimuladorEscandallo'
 import PreciosVenta from '@/pages/PreciosVenta'
 import Stock from '@/pages/compras/Stock'
 // Módulo de Compras v2 (MVP1)
@@ -72,6 +73,15 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="Escandallos">
               <Escandallos />
+            </ProtectedRoute>
+          }
+        />
+        {/* La ruta /simulador debe ir ANTES que /:id para no chocar con el editor */}
+        <Route
+          path="/escandallos/simulador"
+          element={
+            <ProtectedRoute screen="Escandallos">
+              <SimuladorEscandallo />
             </ProtectedRoute>
           }
         />
