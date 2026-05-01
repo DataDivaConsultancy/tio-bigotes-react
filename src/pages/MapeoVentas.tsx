@@ -36,6 +36,7 @@ interface ProductoOption {
   id: number
   nombre: string
   codigo: string | null
+  tipo: 'venta' | 'compra' | 'ambos'
 }
 interface Sugerencia {
   producto_id: number
@@ -74,8 +75,7 @@ export default function MapeoVentas() {
       supabase.from('vw_alias_activos').select('*').order('n_ventas_mapeadas', { ascending: false }),
       supabase
         .from('productos_v2')
-        .select('id, nombre, codigo')
-        .in('tipo', ['venta', 'ambos'])
+        .select('id, nombre, codigo, tipo')
         .eq('activo', true)
         .order('nombre'),
     ])
@@ -448,12 +448,12 @@ function PendientesList({
                                 ))}
                               </optgroup>
                             )}
-                            <optgroup label="Todos los productos de venta">
+                            <optgroup label="Todos los productos">
                               {productos
                                 .filter(prod => !sug.some(s => s.producto_id === prod.id))
                                 .map(prod => (
                                   <option key={prod.id} value={prod.id}>
-                                    {prod.nombre}
+                                    {prod.nombre} · {prod.tipo}
                                   </option>
                                 ))}
                             </optgroup>
