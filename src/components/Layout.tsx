@@ -36,6 +36,7 @@ const navItems: NavItem[] = [
   { key: 'Forecast', label: 'Forecast', icon: TrendingUp, path: '/forecast' },
   { key: 'Pendientes', label: 'Pendientes', icon: AlertCircle, path: '/pendientes' },
   { key: 'CargaVentas', label: 'Subir CSV Ventas', icon: Upload, path: '/carga-ventas', section: 'Datos' },
+  { key: 'CargaVentas', label: 'Mapeo TPV → Productos', icon: Link2, path: '/datos/mapeo-ventas' },
   { key: 'CargaProductos', label: 'Subir CSV Productos', icon: Database, path: '/carga-productos' },
   { key: 'Auditoria', label: 'Auditoría', icon: Shield, path: '/auditoria' },
   { key: 'ComprasDashboard', label: 'Dashboard Compras', icon: LayoutDashboard, path: '/compras', section: 'Compras' },
