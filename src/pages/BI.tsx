@@ -269,6 +269,9 @@ async function fetchVentasPaginated(
 export default function BI() {
   const [fechaDesde, setFechaDesde] = useState(daysAgo(30))
   const [fechaHasta, setFechaHasta] = useState(yesterdayStr())
+  // Label del preset elegido por el usuario (para resaltar UN solo chip aunque
+  // dos presets coincidan en fechas, p.ej. "Hoy" y "Este mes" el día 1 del mes).
+  const [presetLabel, setPresetLabel] = useState<string>('30 días')
   const [locales, setLocales] = useState<Local[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [productosCat, setProductosCat] = useState<ProductoCat[]>([])
@@ -506,6 +509,7 @@ export default function BI() {
   function applyPreset(p: DatePreset) {
     setFechaDesde(p.desde)
     setFechaHasta(p.hasta)
+    setPresetLabel(p.label)
   }
 
   function shiftDay(offset: number) {
@@ -514,6 +518,7 @@ export default function BI() {
     const newDate = d.toISOString().slice(0, 10)
     setFechaDesde(newDate)
     setFechaHasta(newDate)
+    setPresetLabel('')  // pierde la selección de preset al navegar día a día
   }
 
   const catOptions = categorias.map((c) => ({ value: String(c.id), label: c.nombre }))
@@ -566,8 +571,8 @@ export default function BI() {
           <button
             key={p.label}
             onClick={() => applyPreset(p)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-              fechaDesde === p.desde && fechaHasta === p.hasta
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+              presetLabel === p.label
                 ? 'bg-blue-600 text-white border-blue-600'
                 : 'bg-background text-foreground border-border hover:bg-muted'
             }`}
@@ -582,12 +587,12 @@ export default function BI() {
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-foreground">Desde:</label>
           <input type="date" className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-            value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
+            value={fechaDesde} onChange={(e) => { setFechaDesde(e.target.value); setPresetLabel('') }} />
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-foreground">Hasta:</label>
           <input type="date" className="border rounded-md px-3 py-2 text-sm bg-background text-foreground"
-            value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
+            value={fechaHasta} onChange={(e) => { setFechaHasta(e.target.value); setPresetLabel('') }} />
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-foreground">Local:</label>
