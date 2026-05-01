@@ -121,12 +121,14 @@ export default function DetallePedido() {
       const formatoIds = Array.from(new Set((data.lineas ?? []).map((l: any) => l.formato_id))).filter((x): x is string => !!x)
 
       const [{ supabase }] = await Promise.all([import('@/lib/supabase')])
+      // PostgrestFilterBuilder es thenable pero TS lo marca distinto a Promise<any>.
+      // Lo envolvemos en Promise.resolve para alinear los tipos.
       const promises: Promise<any>[] = []
       if (productoIds.length > 0) {
-        promises.push(supabase.from('productos_compra_v2').select('id, nombre').in('id', productoIds))
+        promises.push(Promise.resolve(supabase.from('productos_compra_v2').select('id, nombre').in('id', productoIds)))
       } else promises.push(Promise.resolve({ data: [] }))
       if (formatoIds.length > 0) {
-        promises.push(supabase.from('producto_formatos').select('id, formato_compra, unidad_compra').in('id', formatoIds))
+        promises.push(Promise.resolve(supabase.from('producto_formatos').select('id, formato_compra, unidad_compra').in('id', formatoIds)))
       } else promises.push(Promise.resolve({ data: [] }))
 
       const [prodRes, fmtRes] = await Promise.all(promises)

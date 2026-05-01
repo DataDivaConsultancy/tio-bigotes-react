@@ -57,6 +57,19 @@ export default function ProductosCompra() {
     open: false, data: {}, isNew: true,
   })
 
+  // Modal precio: edita el precio activo del par (proveedor, formato_predeterminado_del_producto)
+  const [modalPrecio, setModalPrecio] = useState<{
+    open: boolean
+    producto: ProductoCompra | null
+    proveedor_id: number | null
+    proveedor_nombre: string
+    precio: string
+    iva_pct: string
+    descuento_pct: string
+    cantidad_minima_pedido: string
+    multiplo_pedido: string
+  }>({ open: false, producto: null, proveedor_id: null, proveedor_nombre: '', precio: '', iva_pct: '21', descuento_pct: '', cantidad_minima_pedido: '', multiplo_pedido: '' })
+
   useEffect(() => { void cargar() }, [])
 
   async function cargar() {
@@ -203,6 +216,87 @@ export default function ProductosCompra() {
     await cargar()
   }
 
+  /* ───── Precios por (proveedor, formato_predeterminado) ───── */
+  async function abrirPrecio(producto: ProductoCompra, r: RelacionPP) {
+    const provNom = nombreProveedor(r.proveedor_id)
+    // Buscar el formato predeterminado del producto
+    const { data: fmt } = await supabase
+      .from('producto_formatos')
+      .select('id')
+      .eq('producto_id', producto.id)
+      .eq('es_predeterminado', true)
+      .limit(1)
+      .maybeSingle()
+    if (!fmt?.id) {
+      alert('Este producto no tiene formato predeterminado. Crea uno en producto_formatos antes de asignar precio.')
+      return
+    }
+    // Buscar precio activo (si existe)
+    const { data: precioRow } = await supabase
+      .from('proveedor_producto_precios')
+      .select('precio, iva_pct, descuento_pct, cantidad_minima_pedido, multiplo_pedido')
+      .eq('proveedor_id', r.proveedor_id)
+      .eq('formato_id', fmt.id)
+      .eq('activa', true)
+      .order('vigente_desde', { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle()
+    setModalPrecio({
+      open: true,
+      producto,
+      proveedor_id: r.proveedor_id,
+      proveedor_nombre: provNom,
+      precio: precioRow?.precio != null ? String(precioRow.precio) : '',
+      iva_pct: precioRow?.iva_pct != null ? String(precioRow.iva_pct) : '21',
+      descuento_pct: precioRow?.descuento_pct != null ? String(precioRow.descuento_pct) : '',
+      cantidad_minima_pedido: precioRow?.cantidad_minima_pedido != null ? String(precioRow.cantidad_minima_pedido) : '',
+      multiplo_pedido: precioRow?.multiplo_pedido != null ? String(precioRow.multiplo_pedido) : '',
+    })
+  }
+
+  async function guardarPrecio() {
+    const m = modalPrecio
+    if (!m.producto || !m.proveedor_id) return
+    const precioNum = parseFloat(m.precio.replace(',', '.'))
+    if (isNaN(precioNum) || precioNum < 0) { alert('Precio inválido'); return }
+    const { data: fmt } = await supabase
+      .from('producto_formatos')
+      .select('id')
+      .eq('producto_id', m.producto.id)
+      .eq('es_predeterminado', true)
+      .limit(1)
+      .maybeSingle()
+    if (!fmt?.id) { alert('Sin formato predeterminado'); return }
+
+    // Cerrar precios anteriores activos (vigente_hasta = ayer)
+    await supabase
+      .from('proveedor_producto_precios')
+      .update({ activa: false, vigente_hasta: new Date().toISOString().slice(0, 10) })
+      .eq('proveedor_id', m.proveedor_id)
+      .eq('formato_id', fmt.id)
+      .eq('activa', true)
+
+    // Insertar nuevo precio activo desde hoy
+    const num = (s: string) => {
+      const v = parseFloat(s.replace(',', '.'))
+      return isNaN(v) ? null : v
+    }
+    const { error } = await supabase.from('proveedor_producto_precios').insert({
+      proveedor_id: m.proveedor_id,
+      formato_id: fmt.id,
+      precio: precioNum,
+      iva_pct: num(m.iva_pct) ?? 21,
+      descuento_pct: num(m.descuento_pct),
+      cantidad_minima_pedido: num(m.cantidad_minima_pedido),
+      multiplo_pedido: num(m.multiplo_pedido),
+      moneda: 'EUR',
+      vigente_desde: new Date().toISOString().slice(0, 10),
+      activa: true,
+    })
+    if (error) { alert(`Error: ${error.message}`); return }
+    setModalPrecio({ ...m, open: false })
+  }
+
   /* ───── Render ───── */
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -320,6 +414,11 @@ export default function ProductosCompra() {
                                   </div>
                                 </div>
                                 <button
+                                  onClick={() => abrirPrecio(p, r)}
+                                  className="px-2 py-1 rounded text-xs font-medium hover:bg-muted text-muted-foreground hover:text-foreground border"
+                                  title="Asignar / cambiar precio"
+                                >Precio</button>
+                                <button
                                   onClick={() => abrirEditarRelacion(p, r)}
                                   className="p-1.5 rounded hover:bg-muted text-muted-foreground"
                                   title="Editar relación"
@@ -413,6 +512,71 @@ export default function ProductosCompra() {
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setModalProd({ ...modalProd, open: false })}>Cancelar</Button>
               <Button onClick={guardarProducto}><Save size={14} className="mr-1.5" />Guardar</Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {/* Modal: precio del par (proveedor, formato predeterminado) */}
+      {modalPrecio.open && modalPrecio.producto && (
+        <ModalShell
+          title={`Precio — ${modalPrecio.producto.nombre} · ${modalPrecio.proveedor_nombre}`}
+          onClose={() => setModalPrecio({ ...modalPrecio, open: false })}
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium block mb-1">Precio unitario (€) *</label>
+              <Input
+                type="text" inputMode="decimal" autoFocus
+                value={modalPrecio.precio}
+                onChange={(e) => setModalPrecio({ ...modalPrecio, precio: e.target.value })}
+                placeholder="0,00"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium block mb-1">IVA (%)</label>
+                <Input
+                  type="text" inputMode="decimal"
+                  value={modalPrecio.iva_pct}
+                  onChange={(e) => setModalPrecio({ ...modalPrecio, iva_pct: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Descuento (%)</label>
+                <Input
+                  type="text" inputMode="decimal"
+                  value={modalPrecio.descuento_pct}
+                  onChange={(e) => setModalPrecio({ ...modalPrecio, descuento_pct: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium block mb-1">Cantidad mín. pedido</label>
+                <Input
+                  type="text" inputMode="decimal"
+                  value={modalPrecio.cantidad_minima_pedido}
+                  onChange={(e) => setModalPrecio({ ...modalPrecio, cantidad_minima_pedido: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Múltiplo pedido</label>
+                <Input
+                  type="text" inputMode="decimal"
+                  value={modalPrecio.multiplo_pedido}
+                  onChange={(e) => setModalPrecio({ ...modalPrecio, multiplo_pedido: e.target.value })}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Al guardar se cierra el precio anterior con vigente_hasta = hoy
+              y se crea uno nuevo activo desde hoy (histórico preservado).
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setModalPrecio({ ...modalPrecio, open: false })}>Cancelar</Button>
+              <Button onClick={guardarPrecio}><Save size={14} className="mr-1.5" />Guardar precio</Button>
             </div>
           </div>
         </ModalShell>

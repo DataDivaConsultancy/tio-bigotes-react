@@ -5,8 +5,9 @@ import { onPendientes } from '@/lib/offline/sync'
 export function useColaPendiente() {
   const [pendientes, setPendientes] = useState(0)
   useEffect(() => {
-    offlineDb.cola.count().then(setPendientes)
-    return onPendientes(setPendientes)
+    void offlineDb.cola.count().then(setPendientes)
+    const off = onPendientes(setPendientes)
+    return () => { off() }
   }, [])
   return pendientes
 }
