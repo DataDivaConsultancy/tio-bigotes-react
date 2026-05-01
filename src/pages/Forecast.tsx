@@ -593,10 +593,11 @@ export default function Forecast() {
       }
       setVentasMap(byProduct)
 
-      // Fetch stock from control_diario
+      // Fetch stock from control_diario_v2 (vista de tb_v2.control_diario)
+      // tb_v2.control_diario solo tiene `resto` (no `stock_final` legacy).
       const { data: stockData } = await supabase
-        .from('control_diario')
-        .select('producto_id, resto, stock_final')
+        .from('control_diario_v2')
+        .select('producto_id, resto')
         .eq('fecha', yesterday)
         .in('producto_id', prodIds)
 
@@ -605,7 +606,7 @@ export default function Forecast() {
         for (const s of stockData) {
           const prod = productos.find(p => p.id === s.producto_id)
           if (prod) {
-            const stock = s.resto ?? s.stock_final ?? 0
+            const stock = s.resto ?? 0
             sMap.set(prod.nombre, stock)
           }
         }
