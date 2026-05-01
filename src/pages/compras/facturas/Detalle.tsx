@@ -110,6 +110,9 @@ export default function DetalleFactura() {
   const [saving, setSaving] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrConfianza, setOcrConfianza] = useState<number | null>(null)
+  const [ocrCamposBajos, setOcrCamposBajos] = useState<Set<string>>(new Set())
 
   useEffect(() => { void load() }, [id])
 
@@ -233,10 +236,95 @@ export default function DetalleFactura() {
     try {
       const { url } = await uploadFoto(file, 'facturas', cab.id ?? 'temp')
       setCab(c => ({ ...c, foto_url: url }))
+      // Disparar OCR automáticamente tras la subida
+      void runOcr(url)
     } catch (e: any) {
       alert(`Error al subir foto: ${e.message}`)
     }
     setUploadingFoto(false)
+  }
+
+  async function runOcr(documentoUrl: string) {
+    setOcrLoading(true)
+    setOcrConfianza(null)
+    setOcrCamposBajos(new Set())
+    try {
+      const { data, error } = await supabase.functions.invoke('ocr-documento', {
+        body: { documento_url: documentoUrl, tipo: 'factura' },
+      })
+      if (error) {
+        alert(`OCR error: ${error.message}`)
+        setOcrLoading(false); return
+      }
+      if (!data?.ok) {
+        alert(`OCR error: ${data?.error ?? 'desconocido'}`)
+        setOcrLoading(false); return
+      }
+      // Pre-llenar campos. Marcar 'bajos' los que tengan datos pero confianza < 50
+      const cab2 = data.cabecera || {}
+      const camposBajos = new Set<string>()
+      const baja = data.confianza < 50
+
+      setCab(prev => {
+        const next = { ...prev }
+        if (cab2.numero && !next.numero) {
+          next.numero = cab2.numero
+          if (baja) camposBajos.add('numero')
+        }
+        if (cab2.fecha) {
+          next.fecha_emision = cab2.fecha
+          if (baja) camposBajos.add('fecha_emision')
+        }
+        if (cab2.importe_total != null) {
+          next.importe_total = String(cab2.importe_total)
+          if (baja) camposBajos.add('importe_total')
+        }
+        if (cab2.importe_neto != null) {
+          next.importe_neto = String(cab2.importe_neto)
+        }
+        if (cab2.iva_total != null) {
+          next.iva_total = String(cab2.iva_total)
+        }
+        return next
+      })
+
+      // Pre-llenar líneas si vienen del OCR y aún no hay líneas con descripción real
+      if (Array.isArray(data.lineas) && data.lineas.length > 0) {
+        const yaTieneLineasReales = lineas.some(l => l.descripcion.trim().length > 0)
+        if (!yaTieneLineasReales) {
+          setLineas(data.lineas.map((l: any, i: number) => ({
+            key: crypto.randomUUID(),
+            descripcion: l.descripcion ?? '',
+            cantidad: String(l.cantidad ?? 0),
+            unidad: 'ud',
+            precio_unitario: String(l.precio_unitario ?? 0),
+            descuento_pct: '0',
+            iva_pct: '21',
+            total_linea: String(l.total_linea ?? 0),
+            notas: '',
+          })))
+        }
+      }
+
+      // Match proveedor por CIF (frontend)
+      if (cab2.cif_proveedor) {
+        const r = await supabase
+          .from('proveedores_v2')
+          .select('id, cif, nombre_comercial')
+          .ilike('cif', `%${cab2.cif_proveedor}%`)
+          .limit(1)
+          .maybeSingle()
+        if (r.data?.id) {
+          setCab(prev => ({ ...prev, proveedor_id: r.data!.id }))
+        }
+      }
+
+      setOcrConfianza(data.confianza ?? 0)
+      setOcrCamposBajos(camposBajos)
+    } catch (e: any) {
+      alert(`OCR error: ${e.message}`)
+    }
+    setOcrLoading(false)
   }
 
   function toggleRecepcion(recId: string) {
@@ -435,6 +523,35 @@ export default function DetalleFactura() {
         </div>
       </div>
 
+      {ocrLoading && (
+        <Card className="border-blue-500/40 bg-blue-500/5">
+          <CardContent className="p-3 text-sm flex items-center gap-3">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
+            <span className="text-blue-700">Analizando el documento con OCR (3-10 segundos)...</span>
+          </CardContent>
+        </Card>
+      )}
+
+      {ocrConfianza != null && !ocrLoading && (
+        <Card className={
+          ocrConfianza >= 75 ? "border-green-500/40 bg-green-500/5" :
+          ocrConfianza >= 50 ? "border-yellow-500/40 bg-yellow-500/5" :
+                                "border-red-500/40 bg-red-500/5"
+        }>
+          <CardContent className="p-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                ✨ OCR aplicado · Confianza <strong>{ocrConfianza}%</strong>
+                {ocrConfianza < 50 && " · Verificá los campos pre-llenados"}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => { setOcrConfianza(null); setOcrCamposBajos(new Set()) }}>
+                Ocultar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {cab.motivo_rechazo && (
         <Card className="border-red-500/30 bg-red-500/5">
           <CardContent className="p-3 text-sm">
@@ -529,20 +646,27 @@ export default function DetalleFactura() {
               <span className="text-xs text-muted-foreground">Sin foto/PDF adjunto</span>
             )}
             {!readonly && (
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={e => e.target.files?.[0] && handleFotoUpload(e.target.files[0])}
-                  className="hidden"
-                />
-                <Button variant="outline" size="sm" disabled={uploadingFoto} asChild>
-                  <span>
-                    <Camera size={12} className="mr-1" />
-                    {uploadingFoto ? 'Subiendo...' : (cab.foto_url ? 'Cambiar foto' : 'Adjuntar foto/PDF')}
-                  </span>
-                </Button>
-              </label>
+              <>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => e.target.files?.[0] && handleFotoUpload(e.target.files[0])}
+                    className="hidden"
+                  />
+                  <Button variant="outline" size="sm" disabled={uploadingFoto || ocrLoading} asChild>
+                    <span>
+                      <Camera size={12} className="mr-1" />
+                      {uploadingFoto ? 'Subiendo...' : (cab.foto_url ? 'Cambiar foto' : 'Adjuntar foto')}
+                    </span>
+                  </Button>
+                </label>
+                {cab.foto_url && (
+                  <Button variant="ghost" size="sm" disabled={ocrLoading} onClick={() => runOcr(cab.foto_url!)}>
+                    {ocrLoading ? 'Analizando...' : '✨ Re-aplicar OCR'}
+                  </Button>
+                )}
+              </>
             )}
           </div>
 
