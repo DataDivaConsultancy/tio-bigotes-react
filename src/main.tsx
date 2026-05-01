@@ -10,9 +10,14 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       immediate: true,
       onRegistered(r) {
         if (r) {
-          // Comprobar actualizaciones cada hora
-          setInterval(() => { r.update().catch(() => {}) }, 60 * 60 * 1000)
+          // Comprobar actualizaciones cada 5 minutos (antes era cada hora)
+          setInterval(() => { r.update().catch(() => {}) }, 5 * 60 * 1000)
         }
+      },
+      onNeedRefresh() {
+        // Hay version nueva — recargar automaticamente
+        console.log('[PWA] Nueva version disponible, recargando...')
+        window.location.reload()
       },
       onOfflineReady() {
         console.log('[PWA] App lista para uso offline')

@@ -26,6 +26,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Activar el SW nuevo inmediatamente, sin esperar al cierre de pestañas
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/, /supabase\.co/],
