@@ -71,6 +71,7 @@ export default function MapeoVentas() {
     const r = await supabase
       .from('productos_v2')
       .select('id, nombre, codigo, tipo')
+      .in('tipo', ['venta', 'ambos'])
       .eq('activo', true)
       .order('nombre')
     if (r.data) setProductos(r.data)
@@ -85,6 +86,7 @@ export default function MapeoVentas() {
       supabase
         .from('productos_v2')
         .select('id, nombre, codigo, tipo')
+        .in('tipo', ['venta', 'ambos'])
         .eq('activo', true)
         .order('nombre'),
     ])
@@ -461,7 +463,7 @@ function PendientesList({
                                 ))}
                               </optgroup>
                             )}
-                            <optgroup label="Todos los productos">
+                            <optgroup label="Productos de venta o ambos">
                               {productos
                                 .filter(prod => !sug.some(s => s.producto_id === prod.id))
                                 .map(prod => (

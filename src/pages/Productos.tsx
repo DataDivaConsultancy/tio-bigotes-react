@@ -372,7 +372,7 @@ export default function Productos() {
             </div>
 
             {/* Aliases TPV - solo al editar producto existente */}
-            {editing && <AliasTpvSection productoId={editing.id} productoNombre={editing.nombre} />}
+            {editing && <AliasTpvSection productoId={editing.id} productoNombre={editing.nombre} productoTipo={editing.tipo} />}
 
             {/* Venta fields */}
             {showVentaFields && (
@@ -619,7 +619,26 @@ interface AliasCandidatoRow {
   producto_origen_nombre: string | null
 }
 
-function AliasTpvSection({ productoId, productoNombre }: { productoId: number; productoNombre: string }) {
+function AliasTpvSection({ productoId, productoNombre, productoTipo }: { productoId: number; productoNombre: string; productoTipo: 'venta' | 'compra' | 'ambos' }) {
+  // Solo productos de venta o ambos pueden recibir alias TPV
+  if (productoTipo === 'compra') {
+    return (
+      <div className="pt-3 border-t">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+          Aliases TPV
+        </h3>
+        <div className="p-3 rounded border border-yellow-500/40 bg-yellow-500/5 text-sm">
+          <p className="text-yellow-700">
+            Este producto es tipo <strong>Compra</strong>. Las ventas del TPV solo pueden asociarse a productos de tipo <strong>Venta</strong> o <strong>Ambos</strong>.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Si este producto también se vende, cambiá el tipo a <strong>Ambos</strong> arriba y guardá. Después podrás asociar alias TPV.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const [aliases, setAliases] = useState<AliasActivoRow[]>([])
   const [candidatos, setCandidatos] = useState<AliasCandidatoRow[]>([])
   const [loading, setLoading] = useState(true)
