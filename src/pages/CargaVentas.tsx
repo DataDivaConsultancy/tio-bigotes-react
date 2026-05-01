@@ -93,13 +93,16 @@ export default function CargaVentas() {
   }, [])
 
   async function loadLocales() {
+    // Leemos de locales_compra_v2 que es donde la pantalla "Locales" del
+    // sidebar crea/edita. Está sincronizada con tb_v2.locales vía trigger,
+    // así que el id que guardamos sirve también para BI y ventas_staging.
     const { data } = await supabase
-      .from('locales_v2')
+      .from('locales_compra_v2')
       .select('id, nombre')
+      .eq('activo', true)
       .order('nombre')
     if (data) {
       setLocales(data as LocalRow[])
-      // Auto-seleccionar si solo hay uno
       if (data.length === 1) setSelectedLocalId((data[0] as LocalRow).id)
     }
   }
