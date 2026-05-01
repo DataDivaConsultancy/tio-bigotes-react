@@ -318,22 +318,50 @@ export default function CargaProductos() {
         let existsId: number | null = null
         if (actualizar) {
           let q = supabase.from('productos_compra_v2').select('id').eq('nombre', payload.nombre).limit(1)
-          if (payload.proveedor_id !== null) q = q.eq('proveedor_id', payload.proveedor_id)
+          // proveedor_id se gestiona en producto_proveedor; aquí solo matcheamos por nombre
           const { data: foundData } = await q
           if (foundData && foundData.length > 0) existsId = foundData[0].id
         }
 
         if (existsId) {
           // UPDATE
+          // Filtrar payload para UPDATE
+          const COLS_PRODUCTO_U = new Set(['nombre','cod_interno','medidas','color','unidad_medida','unidad_minima_compra','unidades_por_paquete','stock_minimo','producto_venta_id','activo'])
+          const productoUpd: Record<string, unknown> = {}
+          for (const k of Object.keys(payload)) {
+            if (COLS_PRODUCTO_U.has(k)) productoUpd[k] = (payload as Record<string, unknown>)[k]
+          }
           const { error: updErr } = await supabase
             .from('productos_compra_v2')
-            .update(payload)
+            .update(productoUpd)
             .eq('id', existsId)
           if (updErr) errores.push({ row: idx_csv, motivo: updErr.message })
           else actualizados++
         } else {
           // INSERT
-          const { error: insErr } = await supabase.from('productos_compra_v2').insert(payload)
+          // Filtrar payload: campos como proveedor_id, cod_proveedor, dia_*, forma_pago,
+          // plazo_pago, precio, tipo_iva ya no existen en productos_compra_v2
+          // (viven en producto_proveedor / proveedor_producto_precios)
+          const COLS_PRODUCTO = new Set(['nombre','cod_interno','medidas','color','unidad_medida','unidad_minima_compra','unidades_por_paquete','stock_minimo','producto_venta_id','activo'])
+          const productoPayload: Record<string, unknown> = {}
+          for (const k of Object.keys(payload)) {
+            if (COLS_PRODUCTO.has(k)) productoPayload[k] = (payload as Record<string, unknown>)[k]
+          }
+          const { data: insData, error: insErr } = await supabase.from('productos_compra_v2').insert(productoPayload).select('id').single()
+          // Si el CSV traía proveedor, crear también la relación en producto_proveedor
+          if (!insErr && insData && (payload as any).proveedor_id) {
+            await supabase.from('producto_proveedor').insert({
+              producto_id: insData.id,
+              proveedor_id: (payload as any).proveedor_id,
+              cod_proveedor: (payload as any).cod_proveedor ?? null,
+              dia_pedido: (payload as any).dia_pedido ?? null,
+              dia_entrega: (payload as any).dia_entrega ?? null,
+              forma_pago: (payload as any).forma_pago ?? null,
+              plazo_pago: (payload as any).plazo_pago ?? null,
+              es_principal: true,
+              activo: true,
+            })
+          }
           if (insErr) errores.push({ row: idx_csv, motivo: insErr.message })
           else creados++
         }

@@ -283,7 +283,7 @@ export default function Stock() {
 
     // Cargar todos los productos_compra_v2 + productos_v2 para resolver matches
     const [pcRes, pvRes, locRes, stockRes] = await Promise.all([
-      supabase.from('productos_compra_v2').select('id, cod_interno, cod_proveedor, nombre').eq('activo', true),
+      supabase.from('productos_compra_v2').select('id, cod_interno, nombre').eq('activo', true),
       supabase.from('productos_v2').select('id, nombre, tipo').eq('activo', true),
       supabase.from('locales_compra_v2').select('id, nombre').eq('activo', true),
       supabase.from('vw_stock_actual').select('producto_compra_id, local_id, stock_actual'),

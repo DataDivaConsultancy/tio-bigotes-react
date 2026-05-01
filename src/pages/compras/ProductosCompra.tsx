@@ -1,565 +1,534 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { supabase, rpcCall } from '@/lib/supabase'
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Search, Pencil, Check, X, ShoppingCart, Download, ChevronDown } from 'lucide-react'
+import {
+  Plus, Search, Pencil, X, ShoppingCart, Trash2, ChevronDown, ChevronRight, Save,
+} from 'lucide-react'
 
 interface ProductoCompra {
   id: number
   nombre: string
-  proveedor_id: number | null
-  producto_venta_id: number | null
-  cod_proveedor: string | null
   cod_interno: string | null
-  precio: number | null
-  tipo_iva: string | null
   unidad_medida: string | null
   unidad_minima_compra: number | null
   unidades_por_paquete: number | null
   stock_minimo: number | null
-  dia_pedido: string | null
-  dia_entrega: string | null
+  producto_venta_id: number | null
   activo: boolean
 }
 
-interface ProveedorOption {
+interface Proveedor {
   id: number
   nombre_comercial: string
 }
 
-const TIPO_IVA_OPTIONS = [
-  { value: 'General 21%', label: 'General (21%)' },
-  { value: 'Reducido 10%', label: 'Reducido (10%)' },
-  { value: 'Superreducido 4%', label: 'Superreducido (4%)' },
-  { value: 'Exento 0%', label: 'Exento (0%)' },
-]
+interface RelacionPP {
+  producto_id: number
+  proveedor_id: number
+  cod_proveedor: string | null
+  dia_pedido: string | null
+  dia_entrega: string | null
+  forma_pago: string | null
+  plazo_pago: string | null
+  es_principal: boolean
+  activo: boolean
+}
 
-const UNIDADES_OPTIONS = ['unidad', 'kg', 'g', 'l', 'ml', 'caja', 'pack', 'saco', 'garrafa', 'palet', 'bandeja', 'bidon', 'docena']
+const UNIDADES = ['unidad','kg','g','l','ml','caja','pack','saco','garrafa','palet','bandeja','bidon','docena']
 
-/* ─── Multi-select dropdown ─── */
-function MultiSelect({
-  label,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string
-  options: string[]
-  selected: Set<string>
-  onChange: (next: Set<string>) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+export default function ProductosCompra() {
+  const [productos, setProductos] = useState<ProductoCompra[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [relaciones, setRelaciones] = useState<RelacionPP[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [expandido, setExpandido] = useState<Record<number, boolean>>({})
+  const [busqueda, setBusqueda] = useState('')
 
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+  // Modal añadir/editar relación
+  const [modalRel, setModalRel] = useState<{ open: boolean; producto: ProductoCompra | null; rel: Partial<RelacionPP>; isNew: boolean }>({
+    open: false, producto: null, rel: {}, isNew: true,
+  })
+
+  // Modal añadir/editar producto
+  const [modalProd, setModalProd] = useState<{ open: boolean; data: Partial<ProductoCompra>; isNew: boolean }>({
+    open: false, data: {}, isNew: true,
+  })
+
+  useEffect(() => { void cargar() }, [])
+
+  async function cargar() {
+    setLoading(true)
+    setError(null)
+    try {
+      const [pRes, provRes, relRes] = await Promise.all([
+        supabase.from('productos_compra_v2')
+          .select('id, nombre, cod_interno, unidad_medida, unidad_minima_compra, unidades_por_paquete, stock_minimo, producto_venta_id, activo')
+          .order('nombre'),
+        supabase.from('proveedores_v2').select('id, nombre_comercial').eq('activo', true).order('nombre_comercial'),
+        supabase.from('producto_proveedor').select('*'),
+      ])
+      if (pRes.error) throw new Error(pRes.error.message)
+      if (provRes.error) throw new Error(provRes.error.message)
+      if (relRes.error) throw new Error(relRes.error.message)
+      setProductos((pRes.data ?? []) as ProductoCompra[])
+      setProveedores((provRes.data ?? []) as Proveedor[])
+      setRelaciones((relRes.data ?? []) as RelacionPP[])
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const allSelected = selected.size === 0 || selected.size === options.length
-  const toggleAll = () => onChange(new Set())
-  const toggle = (v: string) => {
-    const next = new Set(selected)
-    if (next.has(v)) next.delete(v)
-    else next.add(v)
-    if (next.size === options.length) onChange(new Set())
-    else onChange(next)
   }
 
-  const displayText = allSelected
-    ? `${label}: Todos`
-    : selected.size === 1
-      ? `${label}: ${[...selected][0]}`
-      : `${label}: ${selected.size} sel.`
+  const productosFiltrados = useMemo(() => {
+    const q = busqueda.toLowerCase().trim()
+    if (!q) return productos
+    return productos.filter((p) =>
+      p.nombre.toLowerCase().includes(q) ||
+      (p.cod_interno || '').toLowerCase().includes(q),
+    )
+  }, [productos, busqueda])
 
+  function relacionesDe(producto_id: number) {
+    return relaciones.filter((r) => r.producto_id === producto_id)
+  }
+  function nombreProveedor(id: number) {
+    return proveedores.find((p) => p.id === id)?.nombre_comercial ?? `#${id}`
+  }
+
+  /* ───── Producto: crear/editar ───── */
+  function abrirNuevoProducto() {
+    setModalProd({ open: true, isNew: true, data: { nombre: '', cod_interno: '', unidad_medida: 'unidad', activo: true } })
+  }
+  function abrirEditarProducto(p: ProductoCompra) {
+    setModalProd({ open: true, isNew: false, data: { ...p } })
+  }
+  async function guardarProducto() {
+    const d = modalProd.data
+    const nombre = (d.nombre || '').trim()
+    if (!nombre) { alert('El nombre es obligatorio'); return }
+    const payload: Record<string, unknown> = {
+      nombre,
+      cod_interno: d.cod_interno || null,
+      unidad_medida: d.unidad_medida || null,
+      unidad_minima_compra: d.unidad_minima_compra ?? null,
+      unidades_por_paquete: d.unidades_por_paquete ?? null,
+      stock_minimo: d.stock_minimo ?? null,
+      activo: d.activo !== false,
+    }
+    try {
+      if (modalProd.isNew) {
+        const { error } = await supabase.from('productos_compra_v2').insert(payload)
+        if (error) throw new Error(error.message)
+      } else {
+        const { error } = await supabase.from('productos_compra_v2').update(payload).eq('id', d.id!)
+        if (error) throw new Error(error.message)
+      }
+      setModalProd({ open: false, isNew: true, data: {} })
+      await cargar()
+    } catch (e: unknown) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  async function borrarProducto(p: ProductoCompra) {
+    const rels = relacionesDe(p.id).length
+    if (rels > 0) {
+      if (!confirm(`Este producto tiene ${rels} proveedor${rels === 1 ? '' : 'es'} asociado${rels === 1 ? '' : 's'}. ¿Desactivar el producto en lugar de borrar? (Se preservan referencias históricas.)`)) return
+      const { error } = await supabase.from('productos_compra_v2').update({ activo: false }).eq('id', p.id)
+      if (error) { alert(error.message); return }
+      await cargar()
+      return
+    }
+    if (!confirm(`¿Borrar "${p.nombre}"?`)) return
+    const { error } = await supabase.from('productos_compra_v2').delete().eq('id', p.id)
+    if (error) { alert(error.message); return }
+    await cargar()
+  }
+
+  /* ───── Relación producto-proveedor: crear/editar/borrar ───── */
+  function abrirNuevaRelacion(producto: ProductoCompra) {
+    setModalRel({
+      open: true, isNew: true, producto,
+      rel: { producto_id: producto.id, es_principal: relacionesDe(producto.id).length === 0, activo: true },
+    })
+  }
+  function abrirEditarRelacion(producto: ProductoCompra, r: RelacionPP) {
+    setModalRel({ open: true, isNew: false, producto, rel: { ...r } })
+  }
+  async function guardarRelacion() {
+    const r = modalRel.rel
+    if (!r.producto_id || !r.proveedor_id) { alert('Falta el proveedor'); return }
+    const payload = {
+      producto_id: r.producto_id,
+      proveedor_id: r.proveedor_id,
+      cod_proveedor: r.cod_proveedor || null,
+      dia_pedido: r.dia_pedido || null,
+      dia_entrega: r.dia_entrega || null,
+      forma_pago: r.forma_pago || null,
+      plazo_pago: r.plazo_pago || null,
+      es_principal: !!r.es_principal,
+      activo: r.activo !== false,
+    }
+    try {
+      if (modalRel.isNew) {
+        const { error } = await supabase.from('producto_proveedor').insert(payload)
+        if (error) throw new Error(error.message)
+      } else {
+        const { error } = await supabase.from('producto_proveedor')
+          .update(payload)
+          .eq('producto_id', r.producto_id).eq('proveedor_id', r.proveedor_id)
+        if (error) throw new Error(error.message)
+      }
+      // Si marcó "es_principal", desmarcar los demás del mismo producto
+      if (payload.es_principal) {
+        await supabase.from('producto_proveedor')
+          .update({ es_principal: false })
+          .eq('producto_id', payload.producto_id)
+          .neq('proveedor_id', payload.proveedor_id)
+      }
+      setModalRel({ open: false, isNew: true, producto: null, rel: {} })
+      await cargar()
+    } catch (e: unknown) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  async function borrarRelacion(r: RelacionPP) {
+    if (!confirm(`¿Quitar al proveedor "${nombreProveedor(r.proveedor_id)}" de este producto?`)) return
+    const { error } = await supabase.from('producto_proveedor').delete()
+      .eq('producto_id', r.producto_id).eq('proveedor_id', r.proveedor_id)
+    if (error) { alert(error.message); return }
+    await cargar()
+  }
+
+  /* ───── Render ───── */
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md bg-background hover:bg-muted/50 whitespace-nowrap"
-      >
-        {displayText}
-        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-56 max-h-64 overflow-y-auto bg-background border rounded-md shadow-lg">
-          <label className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b text-sm font-medium">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded" />
-            Todos
-          </label>
-          {options.map((opt) => (
-            <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-sm">
-              <input type="checkbox" checked={allSelected || selected.has(opt)} onChange={() => toggle(opt)} className="rounded" />
-              {opt}
-            </label>
-          ))}
+    <div className="max-w-6xl mx-auto space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <ShoppingCart className="h-7 w-7 text-orange-500" />
+          <div>
+            <h1 className="text-2xl font-bold">Productos Compra</h1>
+            <p className="text-sm text-muted-foreground">
+              Catálogo de productos comprables y los proveedores que los ofrecen.
+            </p>
+          </div>
         </div>
+        <Button onClick={abrirNuevoProducto}>
+          <Plus size={16} className="mr-1.5" /> Nuevo producto
+        </Button>
+      </div>
+
+      {error && (
+        <Card><CardContent className="p-4 text-sm text-red-600">{error}</CardContent></Card>
+      )}
+
+      <Card>
+        <CardContent className="py-3">
+          <div className="relative max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar producto…"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            {loading ? 'Cargando…' : `${productosFiltrados.length} de ${productos.length} producto${productos.length === 1 ? '' : 's'}`}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!loading && productos.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Aún no hay productos comprables. Pulsa <strong>"Nuevo producto"</strong> para empezar.
+            </div>
+          ) : (
+            <div className="rounded-lg border divide-y">
+              {productosFiltrados.map((p) => {
+                const rels = relacionesDe(p.id)
+                const open = !!expandido[p.id]
+                return (
+                  <div key={p.id}>
+                    <div className="flex items-center gap-2 p-3 hover:bg-muted/30">
+                      <button
+                        onClick={() => setExpandido({ ...expandido, [p.id]: !open })}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                        aria-label={open ? 'Cerrar' : 'Abrir'}
+                      >
+                        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{p.nombre}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                          {p.cod_interno && <span className="font-mono">{p.cod_interno}</span>}
+                          <span>{p.unidad_medida ?? '—'}</span>
+                          <span className="px-1.5 rounded-full bg-muted">
+                            {rels.length} proveedor{rels.length === 1 ? '' : 'es'}
+                          </span>
+                          {!p.activo && <span className="text-amber-600">Inactivo</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => abrirEditarProducto(p)}
+                        className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                        title="Editar producto"
+                      ><Pencil size={14} /></button>
+                      <button
+                        onClick={() => borrarProducto(p)}
+                        className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 text-muted-foreground"
+                        title="Borrar / desactivar producto"
+                      ><Trash2 size={14} /></button>
+                    </div>
+
+                    {open && (
+                      <div className="px-3 pb-3 pl-10 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground">Proveedores que ofrecen este producto:</p>
+                          <Button size="sm" variant="outline" onClick={() => abrirNuevaRelacion(p)}>
+                            <Plus size={12} className="mr-1" /> Añadir proveedor
+                          </Button>
+                        </div>
+                        {rels.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic">
+                            Sin proveedores. Añade al menos uno para poder comprarlo.
+                          </p>
+                        ) : (
+                          <div className="rounded border divide-y bg-background">
+                            {rels.map((r) => (
+                              <div key={`${r.producto_id}-${r.proveedor_id}`} className="p-2 flex items-center gap-2 text-sm">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{nombreProveedor(r.proveedor_id)}</span>
+                                    {r.es_principal && (
+                                      <span className="text-[10px] uppercase bg-orange-100 text-orange-700 px-1.5 rounded-full">Principal</span>
+                                    )}
+                                    {!r.activo && <span className="text-amber-600 text-xs">Inactivo</span>}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground flex flex-wrap gap-2 mt-0.5">
+                                    {r.cod_proveedor && <span>Cód: {r.cod_proveedor}</span>}
+                                    {r.dia_pedido && <span>Pedido: {r.dia_pedido}</span>}
+                                    {r.dia_entrega && <span>Entrega: {r.dia_entrega}</span>}
+                                    {r.forma_pago && <span>{r.forma_pago}</span>}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => abrirEditarRelacion(p, r)}
+                                  className="p-1.5 rounded hover:bg-muted text-muted-foreground"
+                                  title="Editar relación"
+                                ><Pencil size={12} /></button>
+                                <button
+                                  onClick={() => borrarRelacion(r)}
+                                  className="p-1.5 rounded hover:bg-red-50 hover:text-red-600 text-muted-foreground"
+                                  title="Quitar proveedor"
+                                ><Trash2 size={12} /></button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal: producto */}
+      {modalProd.open && (
+        <ModalShell title={modalProd.isNew ? 'Nuevo producto' : 'Editar producto'} onClose={() => setModalProd({ ...modalProd, open: false })}>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium block mb-1">Nombre *</label>
+              <Input
+                value={modalProd.data.nombre || ''}
+                onChange={(e) => setModalProd({ ...modalProd, data: { ...modalProd.data, nombre: e.target.value } })}
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium block mb-1">Código interno</label>
+                <Input
+                  value={modalProd.data.cod_interno || ''}
+                  onChange={(e) => setModalProd({ ...modalProd, data: { ...modalProd.data, cod_interno: e.target.value } })}
+                  className="font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Unidad medida</label>
+                <select
+                  value={modalProd.data.unidad_medida || 'unidad'}
+                  onChange={(e) => setModalProd({ ...modalProd, data: { ...modalProd.data, unidad_medida: e.target.value } })}
+                  className="w-full px-2 py-1.5 text-sm border rounded-md bg-background"
+                >
+                  {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs font-medium block mb-1">U. mín. compra</label>
+                <Input
+                  type="number" step="any" min={0}
+                  value={modalProd.data.unidad_minima_compra ?? ''}
+                  onChange={(e) => setModalProd({ ...modalProd, data: { ...modalProd.data, unidad_minima_compra: e.target.value === '' ? null : Number(e.target.value) } })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Uds/paquete</label>
+                <Input
+                  type="number" step="any" min={0}
+                  value={modalProd.data.unidades_por_paquete ?? ''}
+                  onChange={(e) => setModalProd({ ...modalProd, data: { ...modalProd.data, unidades_por_paquete: e.target.value === '' ? null : Number(e.target.value) } })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Stock mín.</label>
+                <Input
+                  type="number" step="any" min={0}
+                  value={modalProd.data.stock_minimo ?? ''}
+                  onChange={(e) => setModalProd({ ...modalProd, data: { ...modalProd.data, stock_minimo: e.target.value === '' ? null : Number(e.target.value) } })}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="prod-activo"
+                checked={modalProd.data.activo !== false}
+                onChange={(e) => setModalProd({ ...modalProd, data: { ...modalProd.data, activo: e.target.checked } })}
+              />
+              <label htmlFor="prod-activo" className="text-sm">Activo</label>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setModalProd({ ...modalProd, open: false })}>Cancelar</Button>
+              <Button onClick={guardarProducto}><Save size={14} className="mr-1.5" />Guardar</Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {/* Modal: relación producto↔proveedor */}
+      {modalRel.open && modalRel.producto && (
+        <ModalShell
+          title={`${modalRel.isNew ? 'Añadir' : 'Editar'} proveedor — ${modalRel.producto.nombre}`}
+          onClose={() => setModalRel({ ...modalRel, open: false })}
+        >
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium block mb-1">Proveedor *</label>
+              <select
+                value={modalRel.rel.proveedor_id ?? ''}
+                onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, proveedor_id: e.target.value ? Number(e.target.value) : undefined } })}
+                disabled={!modalRel.isNew}
+                className="w-full px-2 py-1.5 text-sm border rounded-md bg-background"
+              >
+                <option value="">— Elegir —</option>
+                {proveedores
+                  .filter((p) => modalRel.isNew
+                    ? !relacionesDe(modalRel.producto!.id).some((r) => r.proveedor_id === p.id)
+                    : true)
+                  .map((p) => <option key={p.id} value={p.id}>{p.nombre_comercial}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1">Código del producto en este proveedor</label>
+              <Input
+                value={modalRel.rel.cod_proveedor || ''}
+                onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, cod_proveedor: e.target.value } })}
+                placeholder="Ref. del proveedor"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium block mb-1">Día pedido</label>
+                <Input
+                  value={modalRel.rel.dia_pedido || ''}
+                  onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, dia_pedido: e.target.value } })}
+                  placeholder="Lunes"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Día entrega</label>
+                <Input
+                  value={modalRel.rel.dia_entrega || ''}
+                  onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, dia_entrega: e.target.value } })}
+                  placeholder="Miércoles"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium block mb-1">Forma pago</label>
+                <Input
+                  value={modalRel.rel.forma_pago || ''}
+                  onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, forma_pago: e.target.value } })}
+                  placeholder="Transferencia"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Plazo pago</label>
+                <Input
+                  value={modalRel.rel.plazo_pago || ''}
+                  onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, plazo_pago: e.target.value } })}
+                  placeholder="30 días"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={!!modalRel.rel.es_principal}
+                  onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, es_principal: e.target.checked } })}
+                />
+                Proveedor principal
+              </label>
+              <label className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={modalRel.rel.activo !== false}
+                  onChange={(e) => setModalRel({ ...modalRel, rel: { ...modalRel.rel, activo: e.target.checked } })}
+                />
+                Activo
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              El precio se gestiona aparte en la tabla de precios por (proveedor, formato), con histórico
+              de vigencias. Al añadir un proveedor aquí, después podrás asignarle precios.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setModalRel({ ...modalRel, open: false })}>Cancelar</Button>
+              <Button onClick={guardarRelacion}><Save size={14} className="mr-1.5" />Guardar</Button>
+            </div>
+          </div>
+        </ModalShell>
       )}
     </div>
   )
 }
 
-export default function ProductosCompra() {
-  const [productos, setProductos] = useState<ProductoCompra[]>([])
-  const [proveedores, setProveedores] = useState<ProveedorOption[]>([])
-  const [categoriaMap, setCategoriaMap] = useState<Map<number, string>>(new Map())
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [showInactive, setShowInactive] = useState(false)
-  const [editing, setEditing] = useState<ProductoCompra | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-
-  const [form, setForm] = useState<Partial<ProductoCompra>>({})
-
-  // Selection
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-
-  // Multi-select filters
-  const [filterProveedor, setFilterProveedor] = useState<Set<string>>(new Set())
-  const [filterDiaPedido, setFilterDiaPedido] = useState<Set<string>>(new Set())
-  const [filterDiaEntrega, setFilterDiaEntrega] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    loadProductos()
-    loadProveedores()
-    loadCategorias()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showInactive])
-
-  async function loadProveedores() {
-    const { data, error } = await supabase
-      .from('proveedores_v2')
-      .select('id, nombre_comercial')
-      .eq('activo', true)
-      .order('nombre_comercial')
-    if (error) { console.error('loadProveedores:', error); return }
-    if (data) setProveedores(data)
-  }
-
-  async function loadCategorias() {
-    const { data, error } = await supabase
-      .from('vw_productos_dim')
-      .select('id, categoria')
-    if (error) { console.error('loadCategorias:', error); return }
-    if (data) {
-      const map = new Map<number, string>()
-      data.forEach((d: any) => { if (d.categoria) map.set(d.id, d.categoria) })
-      setCategoriaMap(map)
-    }
-  }
-
-  async function loadProductos() {
-    setLoading(true)
-    let query = supabase
-      .from('productos_compra_v2')
-      .select('id, nombre, proveedor_id, producto_venta_id, cod_proveedor, cod_interno, precio, tipo_iva, unidad_medida, unidad_minima_compra, unidades_por_paquete, stock_minimo, dia_pedido, dia_entrega, activo')
-      .order('nombre')
-
-    if (!showInactive) query = query.eq('activo', true)
-
-    const { data, error } = await query
-    if (error) {
-      console.error('loadProductos:', error)
-      setErrorMsg(error.message)
-      setLoading(false)
-      return
-    }
-    setErrorMsg(null)
-    if (data) setProductos(data as ProductoCompra[])
-    setLoading(false)
-  }
-
-  const proveedorMap = new Map(proveedores.map((pv) => [pv.id, pv.nombre_comercial]))
-
-  // Unique values for filter dropdowns
-  const uniqueProveedores = useMemo(() => {
-    const names = new Set<string>()
-    productos.forEach((p) => {
-      if (p.proveedor_id) {
-        const name = proveedorMap.get(p.proveedor_id)
-        if (name) names.add(name)
-      }
-    })
-    return [...names].sort()
-  }, [productos, proveedorMap])
-
-  const uniqueDiasPedido = useMemo(() => {
-    const days = new Set<string>()
-    productos.forEach((p) => {
-      if (p.dia_pedido) {
-        p.dia_pedido.split(',').forEach((d) => {
-          const trimmed = d.trim()
-          if (trimmed) days.add(trimmed)
-        })
-      }
-    })
-    return [...days].sort()
-  }, [productos])
-
-  const uniqueDiasEntrega = useMemo(() => {
-    const days = new Set<string>()
-    productos.forEach((p) => {
-      if (p.dia_entrega) {
-        p.dia_entrega.split(',').forEach((d) => {
-          const trimmed = d.trim()
-          if (trimmed) days.add(trimmed)
-        })
-      }
-    })
-    return [...days].sort()
-  }, [productos])
-
-  // Apply all filters
-  const filtered = useMemo(() => {
-    return productos.filter((p) => {
-      const q = search.toLowerCase()
-      const matchesSearch =
-        p.nombre.toLowerCase().includes(q) ||
-        (p.cod_proveedor || '').toLowerCase().includes(q) ||
-        (p.cod_interno || '').toLowerCase().includes(q)
-      if (!matchesSearch) return false
-
-      // Proveedor filter
-      if (filterProveedor.size > 0) {
-        const provName = p.proveedor_id ? proveedorMap.get(p.proveedor_id) : null
-        if (!provName || !filterProveedor.has(provName)) return false
-      }
-      // Día pedido filter
-      if (filterDiaPedido.size > 0) {
-        if (!p.dia_pedido) return false
-        const dias = p.dia_pedido.split(',').map((d) => d.trim())
-        if (!dias.some((d) => filterDiaPedido.has(d))) return false
-      }
-      // Día entrega filter
-      if (filterDiaEntrega.size > 0) {
-        if (!p.dia_entrega) return false
-        const dias = p.dia_entrega.split(',').map((d) => d.trim())
-        if (!dias.some((d) => filterDiaEntrega.has(d))) return false
-      }
-      return true
-    })
-  }, [productos, search, filterProveedor, filterDiaPedido, filterDiaEntrega, proveedorMap])
-
-  // Selection helpers
-  const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selectedIds.has(p.id))
-  const someFilteredSelected = filtered.some((p) => selectedIds.has(p.id))
-
-  function toggleSelectAll() {
-    if (allFilteredSelected) {
-      const next = new Set(selectedIds)
-      filtered.forEach((p) => next.delete(p.id))
-      setSelectedIds(next)
-    } else {
-      const next = new Set(selectedIds)
-      filtered.forEach((p) => next.add(p.id))
-      setSelectedIds(next)
-    }
-  }
-
-  function toggleSelect(id: number) {
-    const next = new Set(selectedIds)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setSelectedIds(next)
-  }
-
-  // Excel download
-  async function downloadExcel() {
-    const XLSX = await import('xlsx')
-    const toExport = filtered.filter((p) => selectedIds.size === 0 || selectedIds.has(p.id))
-    if (toExport.length === 0) return
-
-    const rows = toExport.map((p) => ({
-      'Nombre': p.nombre,
-      'Categoría': p.producto_venta_id ? categoriaMap.get(p.producto_venta_id) ?? '' : '',
-      'Proveedor': p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? '' : '',
-      'Código Proveedor': p.cod_proveedor ?? '',
-      'Código Interno': p.cod_interno ?? '',
-      'Unidad Medida': p.unidad_medida ?? '',
-      'Compra Mínima': p.unidad_minima_compra ?? '',
-      'Uds por Paquete': p.unidades_por_paquete ?? '',
-      'Precio (€)': p.precio ?? '',
-      'Tipo IVA': p.tipo_iva ?? '',
-      'Stock Mínimo': p.stock_minimo ?? '',
-      'Día Pedido': p.dia_pedido ?? '',
-      'Día Entrega': p.dia_entrega ?? '',
-      'Activo': p.activo ? 'Sí' : 'No',
-    }))
-
-    const ws = XLSX.utils.json_to_sheet(rows)
-    // Auto-width columns
-    const colWidths = Object.keys(rows[0]).map((key) => {
-      const maxLen = Math.max(key.length, ...rows.map((r) => String((r as any)[key]).length))
-      return { wch: Math.min(maxLen + 2, 40) }
-    })
-    ws['!cols'] = colWidths
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Productos')
-    XLSX.writeFile(wb, `productos_compra_${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
-
-  // CRUD helpers (unchanged)
-  function startCreate() { setCreating(true); setEditing(null); setForm({ activo: true }) }
-  function startEdit(p: ProductoCompra) { setEditing(p); setCreating(false); setForm({ ...p }) }
-  function cancelEdit() { setEditing(null); setCreating(false); setForm({}); setErrorMsg(null) }
-
-  async function save() {
-    if (!form.nombre?.trim()) return
-    setSaving(true)
-    setErrorMsg(null)
-
-    const payload = {
-      p_nombre: form.nombre,
-      p_proveedor_id: form.proveedor_id ?? null,
-      p_cod_proveedor: form.cod_proveedor ?? null,
-      p_cod_interno: form.cod_interno ?? null,
-      p_unidad_medida: form.unidad_medida ?? null,
-      p_unidad_minima_compra: form.unidades_por_paquete ?? null,
-      p_unidades_por_paquete: form.unidades_por_paquete ?? 1,
-      p_dia_pedido: form.dia_pedido ?? null,
-      p_dia_entrega: form.dia_entrega ?? null,
-      p_precio: form.precio ?? null,
-      p_tipo_iva: form.tipo_iva ?? null,
-      p_stock_minimo: form.stock_minimo ?? 0,
-    }
-
-    let result
-    if (creating) {
-      result = await rpcCall('rpc_crear_producto_compra', payload)
-    } else if (editing) {
-      result = await rpcCall('rpc_actualizar_producto_compra', { p_id: editing.id, ...payload, p_activo: form.activo })
-    } else { setSaving(false); return }
-
-    if (!result.ok) { setErrorMsg(result.error || 'Error al guardar el producto'); setSaving(false); return }
-    setSaving(false)
-    cancelEdit()
-    loadProductos()
-  }
-
-  const isEditing = creating || editing !== null
-  const selCount = selectedIds.size
-
+/* Modal genérico simple */
+function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center">
-            <ShoppingCart size={20} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">Productos de compra</h1>
-            <p className="text-sm text-muted-foreground">{filtered.length} productos{selCount > 0 ? ` · ${selCount} seleccionados` : ''}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={downloadExcel} disabled={filtered.length === 0}>
-            <Download size={16} /> Descargar Excel{selCount > 0 ? ` (${selCount})` : ''}
-          </Button>
-          <Button onClick={startCreate} disabled={isEditing}>
-            <Plus size={16} /> Nuevo producto
-          </Button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nombre o código..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <MultiSelect label="Proveedor" options={uniqueProveedores} selected={filterProveedor} onChange={setFilterProveedor} />
-        <MultiSelect label="Día pedido" options={uniqueDiasPedido} selected={filterDiaPedido} onChange={setFilterDiaPedido} />
-        <MultiSelect label="Día entrega" options={uniqueDiasEntrega} selected={filterDiaEntrega} onChange={setFilterDiaEntrega} />
-        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-          <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="rounded" />
-          Mostrar inactivos
-        </label>
-      </div>
-
-      {errorMsg && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="py-3 text-sm text-red-700">{errorMsg}</CardContent>
-        </Card>
-      )}
-
-      {/* Form Crear/Editar */}
-      {isEditing && (
-        <Card className="border-primary/30 shadow-md">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base">
-              {creating ? 'Nuevo producto' : `Editando: ${editing?.nombre}`}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <label className="text-xs font-medium text-muted-foreground">Nombre *</label>
-                <Input value={form.nombre || ''} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Proveedor</label>
-                <select
-                  value={form.proveedor_id ?? ''}
-                  onChange={(e) => setForm({ ...form, proveedor_id: e.target.value ? Number(e.target.value) : null })}
-                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  <option value="">— Sin proveedor —</option>
-                  {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre_comercial}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Código proveedor</label>
-                <Input value={form.cod_proveedor || ''} onChange={(e) => setForm({ ...form, cod_proveedor: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Código interno</label>
-                <Input value={form.cod_interno || ''} onChange={(e) => setForm({ ...form, cod_interno: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Unidad de medida</label>
-                <select
-                  value={form.unidad_medida ?? ''}
-                  onChange={(e) => setForm({ ...form, unidad_medida: e.target.value || null })}
-                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  <option value="">—</option>
-                  {UNIDADES_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">
-                  Compra mínima <span className="ml-1 text-[10px] text-muted-foreground/70">(unidades por paquete)</span>
-                </label>
-                <Input
-                  type="number" step="any" min={1}
-                  value={form.unidades_por_paquete ?? ''}
-                  onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null, unidad_minima_compra: e.target.value ? Number(e.target.value) : null })}
-                  placeholder="1"
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">Ej: caja de 60 empanadas → 60. Una empanada suelta → 1.</p>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Precio (€)</label>
-                <Input type="number" step="0.01" min={0} value={form.precio ?? ''} onChange={(e) => setForm({ ...form, precio: e.target.value ? Number(e.target.value) : null })} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Tipo IVA</label>
-                <select
-                  value={form.tipo_iva ?? ''}
-                  onChange={(e) => setForm({ ...form, tipo_iva: e.target.value || null })}
-                  className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30">
-                  <option value="">— Seleccionar —</option>
-                  {TIPO_IVA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Stock mínimo</label>
-                <Input type="number" step="any" min={0} value={form.stock_minimo ?? ''} onChange={(e) => setForm({ ...form, stock_minimo: e.target.value ? Number(e.target.value) : null })} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Día pedido</label>
-                <Input value={form.dia_pedido || ''} onChange={(e) => setForm({ ...form, dia_pedido: e.target.value })} placeholder="Lunes, Miércoles…" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Día entrega</label>
-                <Input value={form.dia_entrega || ''} onChange={(e) => setForm({ ...form, dia_entrega: e.target.value })} placeholder="Martes, Jueves…" />
-              </div>
-              {!creating && (
-                <div className="flex items-center gap-2 mt-6">
-                  <input type="checkbox" id="activo-edit" checked={form.activo ?? true} onChange={(e) => setForm({ ...form, activo: e.target.checked })} className="rounded" />
-                  <label htmlFor="activo-edit" className="text-sm">Activo</label>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <Button variant="outline" onClick={cancelEdit} disabled={saving}><X size={16} /> Cancelar</Button>
-              <Button onClick={save} disabled={saving || !form.nombre?.trim()}><Check size={16} /> {saving ? 'Guardando…' : (creating ? 'Crear' : 'Guardar')}</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Tabla */}
-      {!loading && (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 border-b">
-                  <tr className="text-left">
-                    <th className="px-3 py-3 w-10">
-                      <input
-                        type="checkbox"
-                        checked={allFilteredSelected}
-                        ref={(el) => { if (el) el.indeterminate = someFilteredSelected && !allFilteredSelected }}
-                        onChange={toggleSelectAll}
-                        className="rounded"
-                      />
-                    </th>
-                    <th className="px-4 py-3 font-semibold">Nombre</th>
-                    <th className="px-4 py-3 font-semibold">Categoría</th>
-                    <th className="px-4 py-3 font-semibold">Proveedor</th>
-                    <th className="px-4 py-3 font-semibold">Unidad</th>
-                    <th className="px-4 py-3 font-semibold text-right">Precio</th>
-                    <th className="px-4 py-3 font-semibold">IVA</th>
-                    <th className="px-4 py-3 font-semibold text-right">Uds/paq</th>
-                    <th className="px-4 py-3 font-semibold text-right">Stock min</th>
-                    <th className="px-4 py-3 font-semibold w-12"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((p) => (
-                    <tr key={p.id} className={`border-b last:border-0 hover:bg-muted/30 ${!p.activo ? 'opacity-50' : ''} ${selectedIds.has(p.id) ? 'bg-primary/5' : ''}`}>
-                      <td className="px-3 py-2">
-                        <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded" />
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="font-medium">{p.nombre}</div>
-                        {p.cod_proveedor && <div className="text-xs text-muted-foreground">{p.cod_proveedor}</div>}
-                      </td>
-                      <td className="px-4 py-2">
-                        {p.producto_venta_id && categoriaMap.get(p.producto_venta_id)
-                          ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">{categoriaMap.get(p.producto_venta_id)}</span>
-                          : <span className="text-muted-foreground">—</span>}
-                      </td>
-                      <td className="px-4 py-2">{p.proveedor_id ? proveedorMap.get(p.proveedor_id) ?? '—' : '—'}</td>
-                      <td className="px-4 py-2 text-muted-foreground">{p.unidad_medida ?? '—'}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {p.precio != null ? Number(p.precio).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }) : '—'}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground">{p.tipo_iva ?? '—'}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{p.unidades_por_paquete ?? 1}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{p.stock_minimo ?? '—'}</td>
-                      <td className="px-4 py-2">
-                        <Button variant="ghost" size="icon" onClick={() => startEdit(p)} disabled={isEditing}><Pencil size={14} /></Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filtered.length === 0 && (
-                    <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
-                      {productos.length === 0 ? 'Aún no hay productos. Crea el primero.' : 'No hay productos que coincidan con los filtros.'}
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {loading && <div className="text-center text-muted-foreground py-8">Cargando…</div>}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <Card className="w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <CardHeader className="flex-row items-center justify-between">
+          <CardTitle className="text-base">{title}</CardTitle>
+          <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={16} /></button>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
     </div>
   )
 }

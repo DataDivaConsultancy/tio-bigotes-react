@@ -62,7 +62,7 @@ export default function DetalleRecepcion() {
       setLineas(lineas as any[])
       const ids = Array.from(new Set((lineas ?? []).map((l: any) => l.producto_id).filter(Boolean)))
       if (ids.length > 0) {
-        const { data } = await supabase.from('productos_compra_v2').select('id, nombre, tipo_iva').in('id', ids)
+        const { data } = await supabase.from('productos_compra_v2').select('id, nombre').in('id', ids)
         const m = new Map<number, Producto>()
         ;(data ?? []).forEach((p: any) => m.set(p.id, p))
         setProductos(m)
