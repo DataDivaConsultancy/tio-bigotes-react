@@ -142,13 +142,16 @@ export default function Productos() {
     if (!form.nombre?.trim()) return
     setSaving(true)
 
-    // Determinar tipo automáticamente
-    const hasCompraData = form.proveedor_id != null || (form.precio_compra != null && form.precio_compra > 0)
+    // El tipo lo elige el usuario explicitamente con los botones Venta/Compra/Ambos.
+    // Si no esta seteado (caso raro), inferir de los datos de compra disponibles.
     const isVendible = form.es_vendible ?? (editing?.es_vendible ?? true)
-    let tipo = form.tipo || 'venta'
-    if (isVendible && hasCompraData) tipo = 'ambos'
-    else if (hasCompraData && !isVendible) tipo = 'compra'
-    else if (!hasCompraData) tipo = 'venta'
+    let tipo = form.tipo
+    if (!tipo) {
+      const hasCompraData = form.proveedor_id != null || (form.precio_compra != null && form.precio_compra > 0)
+      if (isVendible && hasCompraData) tipo = 'ambos'
+      else if (hasCompraData && !isVendible) tipo = 'compra'
+      else tipo = 'venta'
+    }
 
     // Build payload with only columns that exist in tb_v2.productos (via productos_v2 view)
     const payload: Record<string, any> = {
