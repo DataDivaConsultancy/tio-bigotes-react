@@ -207,6 +207,25 @@ export default function Productos() {
       const { error } = await supabase.from('productos_v2').insert(payload)
       if (error) { alert(error.message); setSaving(false); return }
     } else if (editing) {
+      // Si el nombre cambió, primero llamar a la RPC que auto-crea alias TPV
+      // si el nombre viejo aparecía en ventas. Esto preserva el match en
+      // futuras importaciones del CSV.
+      if (payload.nombre && payload.nombre !== editing.nombre) {
+        const { data: r, error: errRen } = await supabase.rpc('rpc_renombrar_producto_con_alias', {
+          p_producto_id: editing.id,
+          p_nombre_nuevo: payload.nombre,
+        })
+        if (errRen) { alert(`Error al renombrar: ${errRen.message}`); setSaving(false); return }
+        if (r?.error) { alert(`Error al renombrar: ${r.error}`); setSaving(false); return }
+        if (r?.alias_creado) {
+          alert(
+            `✓ Producto renombrado.\n\n` +
+            `Se creó automáticamente el alias TPV "${r.alias_tpv_creado}" para preservar el mapeo de ${r.ventas_preservadas} ventas históricas y futuras importaciones del CSV.`
+          )
+          // Refrescar la materialized view en background
+          void supabase.rpc('rpc_refresh_alias_pendientes')
+        }
+      }
       const { error } = await supabase.from('productos_v2').update(payload).eq('id', editing.id)
       if (error) { alert(error.message); setSaving(false); return }
     }
