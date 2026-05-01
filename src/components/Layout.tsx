@@ -5,6 +5,7 @@ import { useConfigApp } from '@/hooks/useConfigApp'
 import { procesar as procesarColaOffline } from '@/lib/offline/sync'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import HelpChat from '@/components/help/HelpChat'
 import {
   Package, Users, ClipboardList, BarChart3, TrendingUp,
   AlertCircle, Upload, Shield, Factory, ShoppingCart,
@@ -22,15 +23,18 @@ interface NavItem {
   section?: string
 }
 
+// El campo `key` se usa para el control de permisos (hasAccess(key)).
+// Como react `key` se utiliza el `path`, que es único por ítem, evitando el
+// warning de keys duplicados que tenía la versión anterior.
 const navItems: NavItem[] = [
-  { key: 'Home', label: 'Inicio', icon: Home, path: '/' },
+  { key: 'Home', label: 'Inicio (BI)', icon: BarChart3, path: '/' },
   { key: 'Productos', label: 'Productos', icon: Package, path: '/productos', section: 'Gestión' },
-  { key: 'Escandallos', label: 'Escandallos', icon: BookOpen, path: '/escandallos', section: 'Gestión' },
+  { key: 'Escandallos', label: 'Escandallos', icon: BookOpen, path: '/escandallos' },
   { key: 'Escandallos', label: 'Simulador', icon: Calculator, path: '/escandallos/simulador' },
   { key: 'Escandallos', label: 'Dashboard márgenes', icon: BarChart3, path: '/escandallos/dashboard' },
-  { key: 'Precios', label: 'Precios de Venta', icon: DollarSign, path: '/precios', section: 'Gestión' },
+  { key: 'Precios', label: 'Precios de Venta', icon: DollarSign, path: '/precios' },
   { key: 'Empleados', label: 'Empleados', icon: Users, path: '/empleados' },
-    { key: 'Roles', label: 'Roles', icon: KeyRound, path: '/roles' },
+  { key: 'Roles', label: 'Roles', icon: KeyRound, path: '/roles' },
   { key: 'Operativa', label: 'Control Diario', icon: ClipboardList, path: '/operativa', section: 'Operaciones' },
   { key: 'BI', label: 'Historial / BI', icon: BarChart3, path: '/bi' },
   { key: 'Forecast', label: 'Forecast', icon: TrendingUp, path: '/forecast' },
@@ -41,7 +45,6 @@ const navItems: NavItem[] = [
   { key: 'Auditoria', label: 'Auditoría', icon: Shield, path: '/auditoria' },
   { key: 'ComprasDashboard', label: 'Dashboard Compras', icon: LayoutDashboard, path: '/compras', section: 'Compras' },
   { key: 'Proveedores', label: 'Proveedores', icon: Factory, path: '/proveedores' },
-  // ProductosCompra eliminado — unificado en Productos
   { key: 'Locales', label: 'Locales', icon: Store, path: '/locales' },
   { key: 'Stock', label: 'Gestión de Stock', icon: BoxesIcon, path: '/stock' },
   { key: 'Pedidos', label: 'Pedidos', icon: FileText, path: '/compras/pedidos' },
@@ -144,7 +147,7 @@ export default function Layout() {
             }
             const Icon = item.icon
             return (
-              <div key={item.key}>
+              <div key={item.path}>
                 {sectionHeader}
                 <button
                   onClick={() => {
@@ -221,6 +224,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Asistente de ayuda flotante (disponible en todas las pantallas) */}
+      <HelpChat />
     </div>
   )
 }

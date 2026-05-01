@@ -19,7 +19,6 @@ import MapeoVentas from '@/pages/MapeoVentas'
 import CargaProductos from '@/pages/CargaProductos'
 import Auditoria from '@/pages/Auditoria'
 import Proveedores from '@/pages/compras/Proveedores'
-// ProductosCompra eliminado — unificado en Productos
 import Locales from '@/pages/compras/Locales'
 import Escandallos from '@/pages/Escandallos'
 import EditorEscandallo from '@/pages/EditorEscandallo'
@@ -27,7 +26,6 @@ import SimuladorEscandallo from '@/pages/SimuladorEscandallo'
 import DashboardEscandallo from '@/pages/DashboardEscandallo'
 import PreciosVenta from '@/pages/PreciosVenta'
 import Stock from '@/pages/compras/Stock'
-// Módulo de Compras v2 (MVP1)
 import ComprasDashboard from '@/pages/compras/Dashboard'
 import ListaPedidos from '@/pages/compras/pedidos/Lista'
 import CrearPedido from '@/pages/compras/pedidos/Crear'
@@ -37,7 +35,6 @@ import ListaRecepciones from '@/pages/compras/recepciones/Lista'
 import DetalleRecepcion from '@/pages/compras/recepciones/Detalle'
 import ListaIncidencias from '@/pages/compras/incidencias/Lista'
 import DetalleIncidencia from '@/pages/compras/incidencias/Detalle'
-// Fase 2 (placeholders)
 import ListaAlbaranes from '@/pages/compras/albaranes/Lista'
 import ListaFacturas from '@/pages/compras/facturas/Lista'
 import DetalleFactura from '@/pages/compras/facturas/Detalle'
@@ -60,7 +57,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
+        {/* Pantalla de inicio: Home decide si renderizar BI directamente
+            (si el usuario tiene acceso) o el welcome con accesos rápidos. */}
         <Route path="/" element={<Home />} />
+        <Route path="/inicio" element={<Home forceWelcome />} />
 
         {/* Gestión */}
         <Route
@@ -232,7 +232,7 @@ function AppRoutes() {
           }
         />
 
-        {/* Módulo de Compras v2 — MVP1 */}
+        {/* Módulo de Compras v2 */}
         <Route
           path="/compras"
           element={
@@ -306,7 +306,7 @@ function AppRoutes() {
           }
         />
 
-        {/* Compras — Fase 2 (placeholders) */}
+        {/* Compras — Fase 2 */}
         <Route
           path="/compras/albaranes"
           element={
@@ -320,7 +320,10 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="FacturasCompra">
               <ListaFacturas />
-                    <Route
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/compras/facturas/nueva"
           element={
             <ProtectedRoute screen="FacturasCompra">
@@ -334,9 +337,6 @@ function AppRoutes() {
             <ProtectedRoute screen="FacturasCompra">
               <DetalleFactura />
             </ProtectedRoute>
-          }
-        />
-        </ProtectedRoute>
           }
         />
       </Route>
