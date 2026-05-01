@@ -55,6 +55,7 @@ type TipoFilter = 'todos' | 'venta' | 'compra' | 'ambos'
 
 export default function Productos() {
   const [productos, setProductos] = useState<Producto[]>([])
+  const [aliasesPorProducto, setAliasesPorProducto] = useState<Map<number, string[]>>(new Map())
   const [categorias, setCategorias] = useState<CategoriaProducto[]>([])
   const [proveedores, setProveedores] = useState<ProveedorOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -78,8 +79,20 @@ export default function Productos() {
       .select('*')
       .order('nombre')
     if (!showInactive) query = query.eq('activo', true)
-    const { data, error } = await query
-    if (!error && data) setProductos(data)
+    const [prodRes, aliasRes] = await Promise.all([
+      query,
+      supabase.from('ventas_alias_v2').select('alias_tpv, producto_id'),
+    ])
+    if (!prodRes.error && prodRes.data) setProductos(prodRes.data)
+    if (!aliasRes.error && aliasRes.data) {
+      const map = new Map<number, string[]>()
+      ;(aliasRes.data as any[]).forEach(a => {
+        const list = map.get(a.producto_id) ?? []
+        list.push(a.alias_tpv)
+        map.set(a.producto_id, list)
+      })
+      setAliasesPorProducto(map)
+    }
     setLoading(false)
   }
 
@@ -525,6 +538,24 @@ export default function Productos() {
                     <td className="py-3 px-4">
                       <div className="font-medium">{p.nombre}</div>
                       {p.observaciones && <div className="text-xs text-muted-foreground truncate max-w-xs">{p.observaciones}</div>}
+                      {(() => {
+                        const aliases = aliasesPorProducto.get(p.id) ?? []
+                        if (aliases.length === 0) return null
+                        return (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {aliases.slice(0, 3).map(a => (
+                              <span key={a} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 text-[10px] font-mono" title={`Alias TPV: ${a}`}>
+                                {a}
+                              </span>
+                            ))}
+                            {aliases.length > 3 && (
+                              <span className="text-[10px] text-muted-foreground self-center">
+                                +{aliases.length - 3} más
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tipoBadgeColor[p.tipo] || ''}`}>
