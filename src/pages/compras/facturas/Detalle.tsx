@@ -236,8 +236,17 @@ export default function DetalleFactura() {
     try {
       const { url } = await uploadFoto(file, 'facturas', cab.id ?? 'temp')
       setCab(c => ({ ...c, foto_url: url }))
-      // Disparar OCR automáticamente tras la subida
-      void runOcr(url)
+      // El OCR (Google Vision) no soporta PDF todavía: solo lanzamos OCR
+      // automáticamente para imágenes. Si es PDF se guarda igual y el
+      // usuario rellena los datos a mano (o sube además una foto).
+      const esPdf = file.type === 'application/pdf' ||
+        file.name.toLowerCase().endsWith('.pdf')
+      if (!esPdf) {
+        void runOcr(url)
+      } else {
+        // No es error: simplemente avisamos.
+        console.info('[OCR] PDF subido — OCR se omite, rellena los datos a mano')
+      }
     } catch (e: any) {
       alert(`Error al subir foto: ${e.message}`)
     }
@@ -248,16 +257,37 @@ export default function DetalleFactura() {
     setOcrLoading(true)
     setOcrConfianza(null)
     setOcrCamposBajos(new Set())
+
+    // El OCR actual (Google Vision via edge function) no soporta PDF.
+    // Si el documento subido es PDF, mostramos un mensaje amable en
+    // lugar de un error técnico.
+    if (documentoUrl.toLowerCase().endsWith('.pdf')) {
+      alert('El OCR automático aún no soporta PDFs. Rellena los datos a mano (próximamente añadiremos extracción de texto desde PDF).')
+      setOcrLoading(false); return
+    }
+
     try {
       const { data, error } = await supabase.functions.invoke('ocr-documento', {
         body: { documento_url: documentoUrl, tipo: 'factura' },
       })
       if (error) {
-        alert(`OCR error: ${error.message}`)
+        // Si la edge function devolvió 400 por PDF u otra razón conocida,
+        // damos un mensaje amable.
+        const msg = String(error.message || error)
+        if (/pdf/i.test(msg)) {
+          alert('El OCR automático aún no soporta PDFs. Rellena los datos a mano.')
+        } else {
+          alert(`OCR error: ${msg}`)
+        }
         setOcrLoading(false); return
       }
       if (!data?.ok) {
-        alert(`OCR error: ${data?.error ?? 'desconocido'}`)
+        const errStr = String(data?.error ?? 'desconocido')
+        if (/pdf/i.test(errStr)) {
+          alert('El OCR automático aún no soporta PDFs. Rellena los datos a mano.')
+        } else {
+          alert(`OCR error: ${errStr}`)
+        }
         setOcrLoading(false); return
       }
       // Pre-llenar campos. Marcar 'bajos' los que tengan datos pero confianza < 50
