@@ -61,6 +61,11 @@ interface SavedMappingConfig {
 
 type ImportStep = 'select' | 'preview' | 'mapping' | 'importing' | 'done'
 
+interface LocalRow {
+  id: number
+  nombre: string
+}
+
 export default function CargaVentas() {
   const [step, setStep] = useState<ImportStep>('select')
   const [file, setFile] = useState<File | null>(null)
@@ -75,12 +80,29 @@ export default function CargaVentas() {
   const [savedMapping, setSavedMapping] = useState<SavedMappingConfig | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
+  // Local destino: imprescindible. Todas las filas se asignan a este local
+  // independientemente de lo que diga la columna "Establecimiento" del CSV.
+  const [locales, setLocales] = useState<LocalRow[]>([])
+  const [selectedLocalId, setSelectedLocalId] = useState<number | null>(null)
 
-  // Load saved mapping config and import history on mount
+  // Load saved mapping config, import history y locales on mount
   useEffect(() => {
     loadSavedMapping()
     loadImportHistory()
+    loadLocales()
   }, [])
+
+  async function loadLocales() {
+    const { data } = await supabase
+      .from('locales_v2')
+      .select('id, nombre')
+      .order('nombre')
+    if (data) {
+      setLocales(data as LocalRow[])
+      // Auto-seleccionar si solo hay uno
+      if (data.length === 1) setSelectedLocalId((data[0] as LocalRow).id)
+    }
+  }
 
   async function loadSavedMapping() {
     const { data } = await supabase
@@ -272,6 +294,11 @@ export default function CargaVentas() {
     const { valid, errorIndices } = validateRows()
     setErrorRows(errorIndices)
 
+    // Resolver el nombre del local seleccionado (todas las filas llevan
+    // este local, sobrescribiendo lo que venga del CSV)
+    const localElegido = locales.find(l => l.id === selectedLocalId)
+    const localNombre = localElegido?.nombre ?? null
+
     const mappedRows = valid.map((row) => {
       const mapped: Record<string, string | number | null> = {}
       EXPECTED_FIELDS.forEach((field) => {
@@ -288,6 +315,8 @@ export default function CargaVentas() {
           mapped[field] = null
         }
       })
+      // Forzar el local destino seleccionado por el usuario
+      if (localNombre) mapped['local'] = localNombre
       return mapped
     })
 
@@ -357,28 +386,59 @@ export default function CargaVentas() {
           <CardHeader>
             <CardTitle className="text-lg">Seleccionar archivo CSV</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-5">
+            {/* Selector de local destino (obligatorio) */}
+            <div>
+              <label className="block text-sm font-medium mb-1.5">
+                Local destino <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedLocalId ?? ''}
+                onChange={(e) => setSelectedLocalId(e.target.value ? Number(e.target.value) : null)}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— Elegir local —</option>
+                {locales.map((l) => (
+                  <option key={l.id} value={l.id}>{l.nombre}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Todas las filas del CSV se asignarán a este local
+                (sobrescribiendo la columna "Establecimiento" si existe).
+              </p>
+              {locales.length === 0 && (
+                <p className="mt-1 text-xs text-amber-600">
+                  No hay locales dados de alta. Crea uno antes desde "Locales".
+                </p>
+              )}
+            </div>
+
+            {/* Zona de drop / selector de archivo */}
             <div
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
+              onDrop={selectedLocalId ? onDrop : undefined}
+              onDragOver={selectedLocalId ? onDragOver : undefined}
+              onDragLeave={selectedLocalId ? onDragLeave : undefined}
               className={`
                 flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed p-12
-                transition-colors duration-200 cursor-pointer
-                ${dragOver
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
-                  : 'border-gray-300 bg-gray-50/50 hover:border-blue-400 hover:bg-blue-50/50 dark:border-gray-600 dark:bg-gray-800/30 dark:hover:border-blue-500 dark:hover:bg-blue-950/10'
+                transition-colors duration-200
+                ${!selectedLocalId
+                  ? 'cursor-not-allowed border-gray-200 bg-gray-100/50 opacity-60 dark:border-gray-700 dark:bg-gray-800/20'
+                  : dragOver
+                    ? 'cursor-pointer border-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                    : 'cursor-pointer border-gray-300 bg-gray-50/50 hover:border-blue-400 hover:bg-blue-50/50 dark:border-gray-600 dark:bg-gray-800/30 dark:hover:border-blue-500 dark:hover:bg-blue-950/10'
                 }
               `}
-              onClick={() => document.getElementById('csv-file-input')?.click()}
+              onClick={() => selectedLocalId && document.getElementById('csv-file-input')?.click()}
             >
-              <FileUp className={`h-12 w-12 ${dragOver ? 'text-blue-500' : 'text-gray-400'}`} />
+              <FileUp className={`h-12 w-12 ${!selectedLocalId ? 'text-gray-300' : dragOver ? 'text-blue-500' : 'text-gray-400'}`} />
               <div className="text-center">
                 <p className="text-base font-medium text-gray-700 dark:text-gray-300">
-                  Arrastrá tu archivo CSV aquí
+                  {selectedLocalId
+                    ? 'Arrastrá tu archivo CSV aquí'
+                    : 'Primero elegí un local'}
                 </p>
                 <p className="mt-1 text-sm text-gray-500">
-                  o hacé click para seleccionar
+                  {selectedLocalId ? 'o hacé click para seleccionar' : ''}
                 </p>
               </div>
               <Input
@@ -387,10 +447,11 @@ export default function CargaVentas() {
                 accept=".csv"
                 className="hidden"
                 onChange={onFileInput}
+                disabled={!selectedLocalId}
               />
             </div>
             {parseError && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
+              <div className="flex items-center gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                 {parseError}
               </div>
