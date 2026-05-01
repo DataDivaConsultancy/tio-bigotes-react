@@ -50,8 +50,12 @@ interface ColumnMapping {
 }
 
 interface ImportHistoryEntry {
-  fecha: string
+  // Fecha real de importación (YYYY-MM-DD del created_at)
+  fecha_import: string
   row_count: number
+  // Rango de fechas de los tickets que abarca esa importación
+  ticket_min?: string
+  ticket_max?: string
 }
 
 interface SavedMappingConfig {
@@ -122,25 +126,44 @@ export default function CargaVentas() {
   }
 
   async function loadImportHistory() {
+    // Trae las últimas 5000 filas ordenadas por created_at desc.
+    // Agrupa por la FECHA DE IMPORTACIÓN (date(created_at)), no por la
+    // fecha del ticket — un CSV de 2023 importado hoy debe aparecer con
+    // fecha de hoy.
     const { data } = await supabase
       .from('ventas_raw_v2')
-      .select('fecha')
+      .select('fecha, created_at')
       .order('created_at', { ascending: false })
-      .limit(500)
+      .limit(5000)
 
     if (data && data.length > 0) {
-      const grouped = data.reduce<Record<string, number>>((acc, row) => {
-        const key = row.fecha ?? 'sin_fecha'
-        acc[key] = (acc[key] || 0) + 1
+      type Bucket = { row_count: number; ticket_min: string; ticket_max: string }
+      const grouped = data.reduce<Record<string, Bucket>>((acc, row) => {
+        const ca = (row as { created_at?: string }).created_at
+        const key = ca ? ca.slice(0, 10) : 'sin_fecha'
+        const ticketF = (row.fecha as string | null) ?? ''
+        if (!acc[key]) acc[key] = { row_count: 0, ticket_min: ticketF || '9999-12-31', ticket_max: ticketF || '0000-01-01' }
+        acc[key].row_count += 1
+        if (ticketF) {
+          if (ticketF < acc[key].ticket_min) acc[key].ticket_min = ticketF
+          if (ticketF > acc[key].ticket_max) acc[key].ticket_max = ticketF
+        }
         return acc
       }, {})
 
       const history: ImportHistoryEntry[] = Object.entries(grouped)
-        .map(([fecha, row_count]) => ({ fecha, row_count }))
-        .sort((a, b) => b.fecha.localeCompare(a.fecha))
+        .map(([fecha_import, b]) => ({
+          fecha_import,
+          row_count: b.row_count,
+          ticket_min: b.ticket_min === '9999-12-31' ? undefined : b.ticket_min,
+          ticket_max: b.ticket_max === '0000-01-01' ? undefined : b.ticket_max,
+        }))
+        .sort((a, b) => b.fecha_import.localeCompare(a.fecha_import))
         .slice(0, 5)
 
       setImportHistory(history)
+    } else {
+      setImportHistory([])
     }
   }
 
@@ -689,14 +712,22 @@ export default function CargaVentas() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-gray-50 dark:bg-gray-800">
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha de carga</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Periodo del CSV</th>
                     <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Filas</th>
                   </tr>
                 </thead>
                 <tbody>
                   {importHistory.map((entry) => (
-                    <tr key={entry.fecha} className="border-b last:border-b-0">
-                      <td className="px-4 py-2">{formatDate(entry.fecha)}</td>
+                    <tr key={entry.fecha_import} className="border-b last:border-b-0">
+                      <td className="px-4 py-2">{formatDate(entry.fecha_import)}</td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">
+                        {entry.ticket_min && entry.ticket_max
+                          ? entry.ticket_min === entry.ticket_max
+                            ? formatDate(entry.ticket_min)
+                            : `${formatDate(entry.ticket_min)} → ${formatDate(entry.ticket_max)}`
+                          : '—'}
+                      </td>
                       <td className="px-4 py-2 text-right">{formatNumber(entry.row_count, 0)}</td>
                     </tr>
                   ))}
