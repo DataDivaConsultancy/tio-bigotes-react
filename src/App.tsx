@@ -23,6 +23,7 @@ import Locales from '@/pages/compras/Locales'
 import Escandallos from '@/pages/Escandallos'
 import EditorEscandallo from '@/pages/EditorEscandallo'
 import SimuladorEscandallo from '@/pages/SimuladorEscandallo'
+import DashboardEscandallo from '@/pages/DashboardEscandallo'
 import PreciosVenta from '@/pages/PreciosVenta'
 import Stock from '@/pages/compras/Stock'
 // Módulo de Compras v2 (MVP1)
@@ -82,6 +83,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute screen="Escandallos">
               <SimuladorEscandallo />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/escandallos/dashboard"
+          element={
+            <ProtectedRoute screen="Escandallos">
+              <DashboardEscandallo />
             </ProtectedRoute>
           }
         />

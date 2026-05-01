@@ -27,6 +27,7 @@ const navItems: NavItem[] = [
   { key: 'Productos', label: 'Productos', icon: Package, path: '/productos', section: 'Gestión' },
   { key: 'Escandallos', label: 'Escandallos', icon: BookOpen, path: '/escandallos', section: 'Gestión' },
   { key: 'Escandallos', label: 'Simulador', icon: Calculator, path: '/escandallos/simulador' },
+  { key: 'Escandallos', label: 'Dashboard márgenes', icon: BarChart3, path: '/escandallos/dashboard' },
   { key: 'Precios', label: 'Precios de Venta', icon: DollarSign, path: '/precios', section: 'Gestión' },
   { key: 'Empleados', label: 'Empleados', icon: Users, path: '/empleados' },
     { key: 'Roles', label: 'Roles', icon: KeyRound, path: '/roles' },

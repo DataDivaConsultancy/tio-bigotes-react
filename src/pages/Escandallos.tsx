@@ -5,7 +5,8 @@ import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Search, BookOpen, Copy, Eye, ChevronRight } from 'lucide-react'
+import { Plus, Search, BookOpen, Copy, Eye, ChevronRight, BarChart3, Download, Calculator } from 'lucide-react'
+import * as XLSX from 'xlsx'
 
 interface EscandalloResumen {
   escandallo_id: number
@@ -77,6 +78,74 @@ export default function Escandallos() {
     else loadData()
   }
 
+
+  async function exportExcel() {
+    if (escandallos.length === 0) {
+      alert('No hay escandallos para exportar')
+      return
+    }
+    // Hoja 1 — Resumen
+    const resumen = escandallos.map(e => ({
+      ID: e.escandallo_id,
+      Nombre: e.nombre,
+      Tipo: e.es_subreceta ? 'Sub-receta' : 'Producto',
+      'Producto vinculado': e.producto_id ?? '',
+      Cantidad: Number(e.cantidad_resultado),
+      Unidad: e.unidad_resultado,
+      'Coste total': e.coste_total != null ? Number(e.coste_total) : '',
+      'Coste por unidad': e.coste_por_unidad != null ? Number(e.coste_por_unidad) : '',
+      'PVP base (c/IVA)': e.pvp_base != null ? Number(e.pvp_base) : '',
+      IVA: e.iva_venta ?? '',
+      'Margen %': e.margen_pct != null ? Number(e.margen_pct) : '',
+      'Margen €': e.margen_bruto != null ? Number(e.margen_bruto) : '',
+    }))
+    // Hoja 2 — Detalle líneas (todas las líneas de todos los escandallos)
+    const ids = escandallos.map(e => e.escandallo_id)
+    const { data: lineas } = await supabase
+      .from('escandallo_lineas')
+      .select('escandallo_id, orden, cantidad_bruta, unidad, merma_pct, coste_override, notas, componente_producto_id, componente_escandallo_id')
+      .in('escandallo_id', ids)
+      .order('escandallo_id')
+      .order('orden')
+    // Mapas para nombres
+    const escNombres = new Map(escandallos.map(e => [e.escandallo_id, e.nombre]))
+    // Productos
+    const prodIds = Array.from(new Set((lineas ?? []).map((l: any) => l.componente_producto_id).filter(Boolean)))
+    const prodMap = new Map<number, { nombre: string; precio_compra: number | null }>()
+    if (prodIds.length > 0) {
+      const { data: prods } = await supabase
+        .from('productos_v2')
+        .select('id, nombre, precio_compra')
+        .in('id', prodIds)
+      ;(prods ?? []).forEach((p: any) => prodMap.set(p.id, { nombre: p.nombre, precio_compra: p.precio_compra }))
+    }
+    const detalle = (lineas ?? []).map((l: any) => {
+      const componente = l.componente_producto_id != null
+        ? prodMap.get(l.componente_producto_id)?.nombre ?? `Producto #${l.componente_producto_id}`
+        : `SUB: ${escNombres.get(l.componente_escandallo_id) ?? '?'}`
+      const costeUnitarioBase = l.componente_producto_id != null
+        ? (prodMap.get(l.componente_producto_id)?.precio_compra ?? null)
+        : null
+      const costeUnitario = l.coste_override != null ? Number(l.coste_override) : (costeUnitarioBase != null ? Number(costeUnitarioBase) : null)
+      return {
+        Escandallo: escNombres.get(l.escandallo_id) ?? `#${l.escandallo_id}`,
+        Orden: l.orden,
+        Componente: componente,
+        Cantidad: Number(l.cantidad_bruta),
+        Unidad: l.unidad,
+        'Merma %': l.merma_pct != null ? Number(l.merma_pct) : 0,
+        'Coste unitario': costeUnitario != null ? costeUnitario : '',
+        'Coste línea': costeUnitario != null ? Number(l.cantidad_bruta) * costeUnitario : '',
+        Notas: l.notas ?? '',
+      }
+    })
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), 'Detalle líneas')
+    XLSX.writeFile(wb, `escandallos_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   const filtered = escandallos.filter(e => {
     const q = search.toLowerCase()
     const matchesSearch = e.nombre.toLowerCase().includes(q)
@@ -100,16 +169,27 @@ export default function Escandallos() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Escandallos</h1>
           <p className="text-sm text-muted-foreground">
             Fichas de coste y composición de productos
           </p>
         </div>
-        <Button onClick={() => navigate('/escandallos/nuevo')}>
-          <Plus size={16} className="mr-2" /> Nuevo escandallo
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/escandallos/dashboard')}>
+            <BarChart3 size={14} className="mr-1.5" /> Dashboard
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate('/escandallos/simulador')}>
+            <Calculator size={14} className="mr-1.5" /> Simulador
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={escandallos.length === 0}>
+            <Download size={14} className="mr-1.5" /> Excel
+          </Button>
+          <Button onClick={() => navigate('/escandallos/nuevo')}>
+            <Plus size={16} className="mr-2" /> Nuevo escandallo
+          </Button>
+        </div>
       </div>
 
       {/* KPIs */}
