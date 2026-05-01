@@ -327,11 +327,20 @@ export default function BI() {
   }, [productosCat])
 
   function getCatId(v: VentaRow): number | null {
+    // IMPORTANTE: priorizamos match por NOMBRE.
+    // historial_ventas.producto_id viene de la tabla legacy `productos`
+    // mientras que vw_productos_dim usa IDs de `productos_v2`. Los IDs
+    // se solapan pero apuntan a productos distintos, así que el match
+    // por ID puede atribuir la venta a una categoría equivocada.
+    // El match por nombre es el único fiable mientras no se consoliden
+    // ambos catálogos.
+    const cByName = prodToCat.byName.get(v.producto.toLowerCase())
+    if (cByName) return cByName
     if (v.producto_id) {
       const c = prodToCat.byId.get(v.producto_id)
       if (c) return c
     }
-    return prodToCat.byName.get(v.producto.toLowerCase()) || null
+    return null
   }
 
   /* \u2500\u2500 Products filtered by selected categories \u2500\u2500 */
