@@ -358,6 +358,9 @@ export default function Productos() {
               </div>
             </div>
 
+            {/* Aliases TPV - solo al editar producto existente */}
+            {editing && <AliasTpvSection productoId={editing.id} productoNombre={editing.nombre} />}
+
             {/* Venta fields */}
             {showVentaFields && (
               <div>
@@ -466,9 +469,6 @@ export default function Productos() {
                 </div>
               </div>
             )}
-
-            {/* Aliases TPV - solo al editar */}
-            {editing && <AliasTpvSection productoId={editing.id} productoNombre={editing.nombre} />}
 
             {/* Activo toggle + actions */}
             <div className="flex items-center justify-between pt-2">
