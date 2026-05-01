@@ -70,3 +70,70 @@ export async function obtenerCatalogoProveedor(proveedorId: number): Promise<Ite
     multiplo_pedido: r.multiplo_pedido != null ? Number(r.multiplo_pedido) : null,
   })) as ItemCatalogo[]
 }
+
+
+export interface ProductoUnico {
+  producto_id: number
+  producto_nombre: string
+  proveedores: {
+    proveedor_id: number
+    proveedor_nombre: string
+    precio: number | null
+  }[]
+}
+
+/**
+ * Lista todos los productos comprables agrupados por NOMBRE.
+ * Para cada producto devuelve los proveedores que lo ofrecen
+ * (con su precio activo) — sirve para el flujo
+ * "Local → Producto → Proveedor" del Crear Pedido.
+ */
+export async function listarProductosUnicos(): Promise<ProductoUnico[]> {
+  const { data, error } = await supabase
+    .from('v_catalogo_proveedor')
+    .select('producto_id, producto_nombre, proveedor_id, precio')
+    .order('producto_nombre')
+  if (error) throw new Error(error.message)
+  const filas = data ?? []
+  if (filas.length === 0) return []
+
+  // Cargar nombres de proveedores en una sola query
+  const provIds = Array.from(new Set(filas.map((r: any) => r.proveedor_id))).filter(
+    (id) => id != null,
+  )
+  let provNombre = new Map<number, string>()
+  if (provIds.length > 0) {
+    const { data: provs, error: e2 } = await supabase
+      .from('proveedores_v2')
+      .select('id, nombre_comercial')
+      .in('id', provIds)
+    if (e2) throw new Error(e2.message)
+    provNombre = new Map((provs ?? []).map((p: any) => [p.id, p.nombre_comercial]))
+  }
+
+  // Agrupar por nombre normalizado para colapsar duplicados de catálogo
+  const groups = new Map<string, ProductoUnico>()
+  for (const r of filas as any[]) {
+    const key = (r.producto_nombre || '').toLowerCase().trim()
+    if (!key) continue
+    if (!groups.has(key)) {
+      groups.set(key, {
+        producto_id: r.producto_id,
+        producto_nombre: r.producto_nombre,
+        proveedores: [],
+      })
+    }
+    const g = groups.get(key)!
+    // Evitar duplicados (proveedor + producto)
+    if (!g.proveedores.find((p) => p.proveedor_id === r.proveedor_id)) {
+      g.proveedores.push({
+        proveedor_id: r.proveedor_id,
+        proveedor_nombre: provNombre.get(r.proveedor_id) ?? `#${r.proveedor_id}`,
+        precio: r.precio != null ? Number(r.precio) : null,
+      })
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) =>
+    a.producto_nombre.localeCompare(b.producto_nombre, 'es'),
+  )
+}

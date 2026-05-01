@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileText, Plus, Minus, Search, AlertCircle, Save } from 'lucide-react'
+import { ArrowLeft, FileText, Plus, Minus, Search, AlertCircle, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { listarLocales, listarProveedores, obtenerCatalogoProveedor, type LocalMin, type ProveedorMin, type ItemCatalogo } from '@/lib/compras/maestros'
+import {
+  listarLocales,
+  listarProductosUnicos,
+  obtenerCatalogoProveedor,
+  type LocalMin,
+  type ProductoUnico,
+  type ItemCatalogo,
+} from '@/lib/compras/maestros'
 import { crearPedido } from '@/lib/compras/pedidos'
 
 type Cantidades = Record<string, number>
@@ -12,15 +19,18 @@ type Cantidades = Record<string, number>
 export default function CrearPedido() {
   const navigate = useNavigate()
   const [locales, setLocales] = useState<LocalMin[]>([])
-  const [proveedores, setProveedores] = useState<ProveedorMin[]>([])
+  const [productosUnicos, setProductosUnicos] = useState<ProductoUnico[]>([])
   const [catalogo, setCatalogo] = useState<ItemCatalogo[]>([])
   const [localId, setLocalId] = useState<number | null>(null)
+  // Producto inicial elegido en el flujo guiado: dispara la selección de proveedor
+  const [productoSel, setProductoSel] = useState<ProductoUnico | null>(null)
+  const [busquedaProducto, setBusquedaProducto] = useState('')
   const [proveedorId, setProveedorId] = useState<number | null>(null)
   const [cantidades, setCantidades] = useState<Cantidades>({})
   const [fechaEntrega, setFechaEntrega] = useState('')
   const [portes, setPortes] = useState(0)
   const [notas, setNotas] = useState('')
-  const [busqueda, setBusqueda] = useState('')
+  const [busquedaCatalogo, setBusquedaCatalogo] = useState('')
   const [soloConPrecio, setSoloConPrecio] = useState(false)
   const [loadingMaestros, setLoadingMaestros] = useState(true)
   const [loadingCatalogo, setLoadingCatalogo] = useState(false)
@@ -28,16 +38,17 @@ export default function CrearPedido() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([listarLocales(), listarProveedores()])
+    Promise.all([listarLocales(), listarProductosUnicos()])
       .then(([l, p]) => {
         setLocales(l)
-        setProveedores(p)
+        setProductosUnicos(p)
         if (l.length === 1) setLocalId(l[0].id)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoadingMaestros(false))
   }, [])
 
+  // Cuando el usuario selecciona un proveedor, carga su catálogo completo
   useEffect(() => {
     if (!proveedorId) {
       setCatalogo([])
@@ -50,6 +61,16 @@ export default function CrearPedido() {
       .catch((e) => setError(e.message))
       .finally(() => setLoadingCatalogo(false))
   }, [proveedorId])
+
+  // Cuando cambia el producto inicial, si solo hay un proveedor para ese
+  // producto lo elegimos automáticamente (acelera el flujo).
+  useEffect(() => {
+    if (productoSel && productoSel.proveedores.length === 1) {
+      setProveedorId(productoSel.proveedores[0].proveedor_id)
+    } else {
+      setProveedorId(null)
+    }
+  }, [productoSel])
 
   function ajustarCantidad(formatoId: string, delta: number, multiplo?: number | null) {
     setCantidades((prev) => {
@@ -71,10 +92,18 @@ export default function CrearPedido() {
     })
   }
 
+  // Búsqueda en el desplegable de productos (paso 2)
+  const productosFiltrados = useMemo(() => {
+    const q = busquedaProducto.toLowerCase().trim()
+    if (!q) return productosUnicos.slice(0, 30)
+    return productosUnicos.filter((p) => p.producto_nombre.toLowerCase().includes(q)).slice(0, 30)
+  }, [productosUnicos, busquedaProducto])
+
+  // Búsqueda dentro del catálogo del proveedor seleccionado (paso 5)
   const catalogoFiltrado = useMemo(() => {
     let items = catalogo
     if (soloConPrecio) items = items.filter((c) => c.precio != null)
-    const q = busqueda.toLowerCase().trim()
+    const q = busquedaCatalogo.toLowerCase().trim()
     if (q) {
       items = items.filter((c) =>
         c.producto_nombre.toLowerCase().includes(q) ||
@@ -83,7 +112,7 @@ export default function CrearPedido() {
       )
     }
     return items
-  }, [catalogo, busqueda, soloConPrecio])
+  }, [catalogo, busquedaCatalogo, soloConPrecio])
 
   const lineasActivas = useMemo(
     () => catalogo.filter((c) => (cantidades[c.formato_id] ?? 0) > 0 && c.precio != null),
@@ -110,6 +139,7 @@ export default function CrearPedido() {
   }, [lineasActivas, cantidades, portes])
 
   const sinPrecio = catalogo.length - catalogo.filter((c) => c.precio != null).length
+  const proveedorNombre = productoSel?.proveedores.find((p) => p.proveedor_id === proveedorId)?.proveedor_nombre
 
   async function guardar() {
     setError(null)
@@ -150,6 +180,11 @@ export default function CrearPedido() {
     return <div className="p-8 text-center text-muted-foreground">Cargando…</div>
   }
 
+  // Helpers de UI: cada paso se habilita solo cuando los anteriores están completos
+  const paso1Listo = !!localId
+  const paso2Listo = !!productoSel
+  const paso3Listo = !!proveedorId
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-32">
       <div className="flex items-center gap-3">
@@ -161,55 +196,174 @@ export default function CrearPedido() {
         </div>
         <div>
           <h1 className="text-xl font-bold">Nuevo pedido</h1>
-          <p className="text-sm text-muted-foreground">Selecciona local, proveedor y añade productos del catálogo</p>
+          <p className="text-sm text-muted-foreground">
+            1) Local → 2) Producto → 3) Proveedor → 4) Fecha entrega
+          </p>
         </div>
       </div>
 
+      {/* PASO 1 — Local */}
       <Card>
-        <CardContent className="py-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Local *</label>
-            <select
-              value={localId ?? ''}
-              onChange={(e) => setLocalId(e.target.value ? Number(e.target.value) : null)}
-              className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
-            >
-              <option value="">— Seleccionar —</option>
-              {locales.map((l) => (
-                <option key={l.id} value={l.id}>{l.nombre}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Proveedor *</label>
+        <CardContent className="py-4">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">1. Local *</label>
+          <select
+            value={localId ?? ''}
+            onChange={(e) => {
+              const v = e.target.value ? Number(e.target.value) : null
+              setLocalId(v)
+              // Reset cascada si cambia el local
+              setProductoSel(null)
+              setProveedorId(null)
+              setCantidades({})
+            }}
+            className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">— Seleccionar local —</option>
+            {locales.map((l) => (
+              <option key={l.id} value={l.id}>{l.nombre}</option>
+            ))}
+          </select>
+        </CardContent>
+      </Card>
+
+      {/* PASO 2 — Producto inicial */}
+      <Card className={!paso1Listo ? 'opacity-50 pointer-events-none' : ''}>
+        <CardContent className="py-4 space-y-3">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            2. Producto a comprar *
+          </label>
+
+          {productoSel ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/30">
+              <span className="font-medium flex-1">{productoSel.producto_nombre}</span>
+              <span className="text-xs text-muted-foreground">
+                {productoSel.proveedores.length} proveedor
+                {productoSel.proveedores.length === 1 ? '' : 'es'}
+              </span>
+              <button
+                onClick={() => { setProductoSel(null); setProveedorId(null); setCantidades({}) }}
+                className="p-1 rounded hover:bg-background text-muted-foreground"
+                title="Cambiar producto"
+                aria-label="Cambiar producto"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder={
+                    productosUnicos.length === 0
+                      ? 'Aún no hay productos comprables. Crea uno en "Productos" con tipo Compra o Ambos.'
+                      : 'Buscar producto…'
+                  }
+                  value={busquedaProducto}
+                  onChange={(e) => setBusquedaProducto(e.target.value)}
+                  className="pl-9"
+                  disabled={productosUnicos.length === 0}
+                />
+              </div>
+              {busquedaProducto && productosFiltrados.length === 0 && (
+                <p className="text-xs text-muted-foreground px-1">
+                  Sin resultados para "{busquedaProducto}".
+                </p>
+              )}
+              {productosFiltrados.length > 0 && (
+                <div className="max-h-64 overflow-y-auto rounded-md border divide-y">
+                  {productosFiltrados.map((p) => (
+                    <button
+                      key={p.producto_id}
+                      onClick={() => { setProductoSel(p); setBusquedaProducto('') }}
+                      className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center justify-between text-sm"
+                    >
+                      <span className="font-medium">{p.producto_nombre}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {p.proveedores.length === 1
+                          ? p.proveedores[0].proveedor_nombre
+                          : `${p.proveedores.length} proveedores`}
+                      </span>
+                    </button>
+                  ))}
+                  {productosUnicos.length > productosFiltrados.length && !busquedaProducto && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground text-center">
+                      Mostrando 30 de {productosUnicos.length}. Escribe para filtrar.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* PASO 3 — Proveedor */}
+      <Card className={!paso2Listo ? 'opacity-50 pointer-events-none' : ''}>
+        <CardContent className="py-4">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            3. Proveedor *
+          </label>
+          {productoSel && productoSel.proveedores.length === 0 ? (
+            <p className="mt-2 text-sm text-amber-600 flex items-center gap-1">
+              <AlertCircle size={14} />
+              Este producto no tiene proveedores con precio. Asigna uno desde "Productos Compra".
+            </p>
+          ) : (
             <select
               value={proveedorId ?? ''}
               onChange={(e) => setProveedorId(e.target.value ? Number(e.target.value) : null)}
               className="mt-1 w-full px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+              disabled={!productoSel}
             >
-              <option value="">— Seleccionar —</option>
-              {proveedores.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre_comercial}</option>
+              <option value="">— Seleccionar proveedor —</option>
+              {(productoSel?.proveedores ?? []).map((p) => (
+                <option key={p.proveedor_id} value={p.proveedor_id}>
+                  {p.proveedor_nombre}
+                  {p.precio != null ? ` · ${p.precio.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}` : ' · sin precio'}
+                </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Fecha entrega solicitada</label>
-            <Input type="date" value={fechaEntrega} onChange={(e) => setFechaEntrega(e.target.value)} className="mt-1" />
-          </div>
+          )}
+          {productoSel && productoSel.proveedores.length > 1 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Este producto se puede comprar a varios proveedores. Elige uno y todas las
+              líneas del pedido serán a ese proveedor.
+            </p>
+          )}
         </CardContent>
       </Card>
 
+      {/* PASO 4 — Fecha entrega */}
+      <Card className={!paso3Listo ? 'opacity-50 pointer-events-none' : ''}>
+        <CardContent className="py-4">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            4. Fecha entrega solicitada
+          </label>
+          <Input
+            type="date"
+            value={fechaEntrega}
+            onChange={(e) => setFechaEntrega(e.target.value)}
+            className="mt-1 max-w-xs"
+            disabled={!proveedorId}
+          />
+        </CardContent>
+      </Card>
+
+      {/* PASO 5 — Catálogo del proveedor (cantidades) */}
       {proveedorId && (
         <Card>
           <CardContent className="p-0">
             <div className="p-4 border-b flex items-center gap-3 flex-wrap">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Catálogo de {proveedorNombre ?? 'proveedor'}
+              </span>
               <div className="relative flex-1 max-w-md">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar producto…"
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar producto en catálogo…"
+                  value={busquedaCatalogo}
+                  onChange={(e) => setBusquedaCatalogo(e.target.value)}
                   className="pl-9"
                 />
               </div>
@@ -237,8 +391,7 @@ export default function CrearPedido() {
             ) : catalogo.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 <AlertCircle className="mx-auto mb-2" size={24} />
-                Este proveedor aún no tiene productos en el catálogo. Añade productos desde
-                <span className="font-medium"> Productos Compra</span>.
+                Este proveedor aún no tiene productos en el catálogo.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -340,6 +493,7 @@ export default function CrearPedido() {
         </Card>
       )}
 
+      {/* Notas + portes (después de elegir proveedor) */}
       {proveedorId && (
         <Card>
           <CardContent className="py-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -367,6 +521,7 @@ export default function CrearPedido() {
         </Card>
       )}
 
+      {/* Footer fijo: totales + crear */}
       <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-card border-t shadow-lg z-30">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-6 text-sm flex-wrap">
