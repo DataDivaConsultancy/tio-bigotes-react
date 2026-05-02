@@ -601,8 +601,10 @@ function cancelEdit() {
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Tipo</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Categoría</th>
                   <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Proveedor</th>
-                  <th className="text-right py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">P. compra</th>
-                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">IVA</th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">P. coste paquete</th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Cant. paq.</th>
+                  <th className="text-right py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">P. unitario</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden xl:table-cell">IVA</th>
                   <th className="text-right py-3 px-4 font-medium text-muted-foreground w-20"></th>
                 </tr>
               </thead>
@@ -650,22 +652,24 @@ function cancelEdit() {
                     <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">
                       {p.proveedor_nombre || '—'}
                     </td>
-                    <td className="py-3 px-4 text-right hidden md:table-cell">
-                      {p.precio_compra != null ? (
-                        <div>
-                          <div className="font-medium tabular-nums">
-                            {formatCurrency(p.precio_compra)}
-                            <span className="text-[10px] text-muted-foreground"> /paq</span>
-                          </div>
-                          {p.unidades_por_paquete && p.unidades_por_paquete > 0 && (
-                            <div className="text-[10px] text-muted-foreground tabular-nums">
-                              unidad: {(p.precio_compra / p.unidades_por_paquete).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-                            </div>
-                          )}
-                        </div>
-                      ) : <span className="text-muted-foreground">—</span>}
+                    <td className="py-3 px-4 text-right hidden md:table-cell font-medium tabular-nums">
+                      {p.precio_compra != null
+                        ? formatCurrency(p.precio_compra)
+                        : <span className="text-muted-foreground font-normal">—</span>}
                     </td>
-                    <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground text-xs">{p.tipo_iva || '—'}</td>
+                    <td className="py-3 px-4 text-right hidden lg:table-cell tabular-nums">
+                      {p.unidades_por_paquete != null && p.unidades_por_paquete > 0
+                        ? p.unidades_por_paquete.toLocaleString('es-ES')
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="py-3 px-4 text-right hidden lg:table-cell tabular-nums">
+                      {(p.precio_compra != null && p.unidades_por_paquete && p.unidades_por_paquete > 0)
+                        ? <span className="text-emerald-600 font-medium">
+                            {(p.precio_compra / p.unidades_por_paquete).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                          </span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="py-3 px-4 hidden xl:table-cell text-muted-foreground text-xs">{p.tipo_iva || '—'}</td>
                     <td className="py-3 px-4 text-right">
                       <button
                         onClick={() => startEdit(p)}
