@@ -11,9 +11,15 @@ import Papa from 'papaparse'
 const ATTR_EXTRA = '__attr_extra__'
 
 const EXPECTED_FIELDS = [
-  // ── Producto (productos_compra_v2) ──
+  // ── Producto (tb_v2.productos + productos_compra_v2) ──
+  'tipo',                  // venta | compra | ambos
   'nombre',
-  'cod_interno',
+  'codigo',                // productos_v2.codigo
+  'cod_interno',           // productos_compra_v2.cod_interno
+  'categoria',             // nombre de categoría (resuelve a categoria_id)
+  'en_precios_venta',      // true/false
+  'observaciones',
+  'notas',                 // notas de compra
   'medidas',
   'color',
   'unidad_medida',
@@ -43,8 +49,14 @@ const EXPECTED_FIELDS = [
  * de mapeo agrupado por sección). */
 const FIELD_LABELS: Record<string, string> = {
   // Producto
+  tipo: 'Tipo (venta / compra / ambos)',
   nombre: 'Nombre del producto *',
-  cod_interno: 'Código interno',
+  codigo: 'Código (interno de venta)',
+  cod_interno: 'Código interno (compras)',
+  categoria: 'Categoría (nombre)',
+  en_precios_venta: 'En lista de precios de venta (true/false)',
+  observaciones: 'Observaciones (notas internas)',
+  notas: 'Notas de compra',
   medidas: 'Medidas (texto libre)',
   color: 'Color',
   unidad_medida: 'Unidad de medida (kg, l, unidad…)',
@@ -71,7 +83,9 @@ const FIELD_LABELS: Record<string, string> = {
 }
 
 const FIELD_GROUPS: Record<string, string> = {
-  nombre: 'Producto', cod_interno: 'Producto', medidas: 'Producto',
+  tipo: 'Producto', nombre: 'Producto', codigo: 'Producto',
+  cod_interno: 'Producto', categoria: 'Producto', en_precios_venta: 'Producto',
+  observaciones: 'Producto', notas: 'Producto', medidas: 'Producto',
   color: 'Producto', unidad_medida: 'Producto', stock_minimo: 'Producto', activo: 'Producto',
   formato_compra: 'Formato', unidad_minima_compra: 'Formato',
   peso_neto_kg: 'Formato', peso_bruto_kg: 'Formato', ean: 'Formato', merma_pct: 'Formato',
@@ -146,6 +160,7 @@ export default function CargaProductos() {
   const [errorRows, setErrorRows] = useState<{ row: number; motivo: string }[]>([])
   const [savedMapping, setSavedMapping] = useState<SavedMappingConfig | null>(null)
   const [proveedores, setProveedores] = useState<Map<string, number>>(new Map())
+  const [categoriasMap, setCategoriasMap] = useState<Map<string, number>>(new Map())
   const [dragOver, setDragOver] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   // Si el producto (match por cod_interno o nombre) ya existe → actualizar sus datos básicos
@@ -156,7 +171,18 @@ export default function CargaProductos() {
   useEffect(() => {
     loadSavedMapping()
     loadProveedores()
+    loadCategoriasMap()
   }, [])
+
+  async function loadCategoriasMap() {
+    const { data } = await supabase
+      .from('categorias_producto_v2').select('id, nombre').order('nombre')
+    if (data) {
+      const m = new Map<string, number>()
+      data.forEach((c: any) => m.set(String(c.nombre).toLowerCase().trim(), c.id))
+      setCategoriasMap(m)
+    }
+  }
 
   /** Descarga una plantilla CSV con las cabeceras y un ejemplo. */
   function descargarPlantilla() {
@@ -395,11 +421,30 @@ export default function CargaProductos() {
         }
       })
 
+      // Resolver categoria por nombre (opcional)
+      let categoria_id: number | null = null
+      const catNombre = get('categoria')
+      if (catNombre) {
+        categoria_id = categoriasMap.get(catNombre.toLowerCase().trim()) ?? null
+      }
+      // Tipo
+      const tipoRaw = get('tipo').toLowerCase()
+      let tipo: 'venta' | 'compra' | 'ambos' | null = null
+      if (tipoRaw.startsWith('vent')) tipo = 'venta'
+      else if (tipoRaw.startsWith('comp')) tipo = 'compra'
+      else if (tipoRaw.startsWith('amb')) tipo = 'ambos'
+
       filasValidas.push({
         idx_csv: idx + 2,
         // Producto
+        tipo,
         nombre,
+        codigo: get('codigo') || null,
         cod_interno: get('cod_interno') || null,
+        categoria_id,
+        en_precios_venta: parseBool(get('en_precios_venta')),
+        observaciones: get('observaciones') || null,
+        notas: get('notas') || null,
         medidas: get('medidas') || null,
         color: get('color') || null,
         unidad_medida: normalizarUnidadMedida(get('unidad_medida')),
@@ -500,6 +545,37 @@ export default function CargaProductos() {
           if (insErr) { errores.push({ row: idx_csv, motivo: insErr.message }); continue }
           productoId = insData!.id
           creados++
+        }
+
+        // ── 1.5 Propagar a tb_v2.productos (si el CSV trae campos del producto de venta) ──
+        if (productoId) {
+          // Buscar producto_venta_id (puede ser null si tipo='compra')
+          const { data: pcRow } = await supabase
+            .from('productos_compra_v2').select('producto_venta_id').eq('id', productoId).maybeSingle()
+          const ventaId = pcRow?.producto_venta_id ?? null
+          // Build payload solo con campos que vinieron en el CSV
+          const ventaUpd: Record<string, unknown> = {}
+          if (p.tipo) ventaUpd['tipo'] = p.tipo
+          if (p.codigo) ventaUpd['codigo'] = p.codigo
+          if (p.categoria_id != null) ventaUpd['categoria_id'] = p.categoria_id
+          if (p.en_precios_venta != null) ventaUpd['en_precios_venta'] = p.en_precios_venta
+          if (p.observaciones) ventaUpd['observaciones'] = p.observaciones
+          if (p.notas) ventaUpd['notas'] = p.notas
+          if (Object.keys(ventaUpd).length > 0) {
+            if (ventaId) {
+              await supabase.from('productos_v2').update(ventaUpd).eq('id', ventaId)
+            } else if (p.tipo === 'venta' || p.tipo === 'ambos') {
+              // No hay registro venta y el CSV indica tipo=venta/ambos → crear uno
+              ventaUpd['nombre'] = p.nombre
+              ventaUpd['activo'] = p.activo !== false
+              const { data: created } = await supabase
+                .from('productos_v2').insert(ventaUpd).select('id').single()
+              if (created?.id) {
+                await supabase.from('productos_compra_v2')
+                  .update({ producto_venta_id: created.id }).eq('id', productoId)
+              }
+            }
+          }
         }
 
         // ── 2. Formato predeterminado: completar peso_neto/bruto/ean/merma/uds_paquete ──

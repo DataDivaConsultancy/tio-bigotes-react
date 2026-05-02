@@ -32,6 +32,16 @@ interface Producto {
   dia_entrega: string | null
   stock_minimo: number | null
   merma_pct?: number | null
+  // Campos del producto_formatos predeterminado
+  formato_compra?: string | null
+  peso_neto_kg?: number | null
+  peso_bruto_kg?: number | null
+  ean?: string | null
+  // Campos de productos_compra_v2 que no estaban en la ficha
+  medidas?: string | null
+  color?: string | null
+  // De proveedor_producto_precios activo
+  descuento_pct?: number | null
   unidades_por_paquete: number | null
   forma_pago: string | null
   plazo_pago: string | null
@@ -152,19 +162,51 @@ export default function Productos() {
     void cargarMermaYAtributos(p)
   }
 
-  /** Carga merma_pct (de producto_formatos) y atributos personalizados
-   * (campos_extra_producto_v2) del producto que se está editando. */
+  /** Carga campos extendidos del producto al editar:
+   * - producto_formatos predeterminado: merma_pct, formato_compra,
+   *   peso_neto_kg, peso_bruto_kg, ean.
+   * - productos_compra_v2: medidas, color.
+   * - proveedor_producto_precios activo (del proveedor principal): descuento_pct.
+   * - campos_extra_producto_v2: atributos. */
   async function cargarMermaYAtributos(p: Producto) {
     if (!p.compra_legacy_id) return
     const compraId = p.compra_legacy_id
-    const [fmtRes, attrRes] = await Promise.all([
-      supabase.from('producto_formatos').select('merma_pct')
+    const [fmtRes, pcRes, attrRes, ppRes] = await Promise.all([
+      supabase.from('producto_formatos')
+        .select('id, merma_pct, formato_compra, peso_neto_kg, peso_bruto_kg, ean')
         .eq('producto_id', compraId).eq('es_predeterminado', true).limit(1).maybeSingle(),
+      supabase.from('productos_compra_v2')
+        .select('medidas, color').eq('id', compraId).maybeSingle(),
       supabase.from('campos_extra_producto_v2').select('campo, valor')
         .eq('producto_compra_id', compraId).order('campo'),
+      supabase.from('producto_proveedor')
+        .select('proveedor_id').eq('producto_id', compraId)
+        .order('es_principal', { ascending: false }).limit(1).maybeSingle(),
     ])
-    if (fmtRes.data?.merma_pct != null) {
-      setForm((prev) => ({ ...prev, merma_pct: Number(fmtRes.data!.merma_pct) }))
+    const upd: Partial<Producto> = {}
+    if (fmtRes.data) {
+      const f = fmtRes.data as Record<string, unknown>
+      if (f.merma_pct != null) upd.merma_pct = Number(f.merma_pct)
+      if (f.formato_compra) upd.formato_compra = f.formato_compra as string
+      if (f.peso_neto_kg != null) upd.peso_neto_kg = Number(f.peso_neto_kg)
+      if (f.peso_bruto_kg != null) upd.peso_bruto_kg = Number(f.peso_bruto_kg)
+      if (f.ean) upd.ean = f.ean as string
+    }
+    if (pcRes.data) {
+      if (pcRes.data.medidas) upd.medidas = pcRes.data.medidas as string
+      if (pcRes.data.color) upd.color = pcRes.data.color as string
+    }
+    // descuento_pct del precio activo del proveedor principal
+    if (ppRes.data?.proveedor_id && fmtRes.data?.id) {
+      const { data: precioRow } = await supabase
+        .from('proveedor_producto_precios').select('descuento_pct')
+        .eq('proveedor_id', ppRes.data.proveedor_id)
+        .eq('formato_id', fmtRes.data.id)
+        .eq('activa', true).limit(1).maybeSingle()
+      if (precioRow?.descuento_pct != null) upd.descuento_pct = Number(precioRow.descuento_pct)
+    }
+    if (Object.keys(upd).length > 0) {
+      setForm((prev) => ({ ...prev, ...upd }))
     }
     if (attrRes.data) {
       setAtributos(attrRes.data.map((a: { campo: string; valor: string }) => ({ campo: a.campo, valor: a.valor })))
@@ -288,11 +330,40 @@ function cancelEdit() {
         .from('productos_v2').select('compra_legacy_id').eq('id', targetId).maybeSingle()
       const compraId = prodRow?.compra_legacy_id ?? null
       if (compraId) {
-        // Merma
-        if (form.merma_pct !== undefined) {
-          await supabase.from('producto_formatos')
-            .update({ merma_pct: form.merma_pct })
+        // Campos del formato predeterminado
+        const fmtUpd: Record<string, unknown> = {}
+        if (form.merma_pct !== undefined)     fmtUpd['merma_pct'] = form.merma_pct
+        if (form.formato_compra !== undefined) fmtUpd['formato_compra'] = form.formato_compra || null
+        if (form.peso_neto_kg !== undefined)   fmtUpd['peso_neto_kg'] = form.peso_neto_kg
+        if (form.peso_bruto_kg !== undefined)  fmtUpd['peso_bruto_kg'] = form.peso_bruto_kg
+        if (form.ean !== undefined)            fmtUpd['ean'] = form.ean || null
+        if (Object.keys(fmtUpd).length > 0) {
+          await supabase.from('producto_formatos').update(fmtUpd)
             .eq('producto_id', compraId).eq('es_predeterminado', true)
+        }
+
+        // Campos directos en productos_compra_v2 (medidas, color)
+        const pcUpd: Record<string, unknown> = {}
+        if (form.medidas !== undefined) pcUpd['medidas'] = form.medidas || null
+        if (form.color !== undefined)   pcUpd['color']   = form.color || null
+        if (Object.keys(pcUpd).length > 0) {
+          await supabase.from('productos_compra_v2').update(pcUpd).eq('id', compraId)
+        }
+
+        // descuento_pct: aplicar al precio activo del proveedor principal
+        if (form.descuento_pct !== undefined) {
+          const { data: pp } = await supabase.from('producto_proveedor')
+            .select('proveedor_id')
+            .eq('producto_id', compraId)
+            .order('es_principal', { ascending: false }).limit(1).maybeSingle()
+          const { data: fmt } = await supabase.from('producto_formatos')
+            .select('id').eq('producto_id', compraId).eq('es_predeterminado', true).maybeSingle()
+          if (pp?.proveedor_id && fmt?.id) {
+            await supabase.from('proveedor_producto_precios')
+              .update({ descuento_pct: form.descuento_pct })
+              .eq('proveedor_id', pp.proveedor_id)
+              .eq('formato_id', fmt.id).eq('activa', true)
+          }
         }
         // Atributos: borrar todos los que tenía y reinsertar los del form
         await supabase.from('campos_extra_producto_v2')
@@ -611,6 +682,66 @@ function cancelEdit() {
                     <p className="mt-1 text-[10px] text-muted-foreground">
                       Pérdida típica al manipular el producto (ej. 5% en kg de carne).
                     </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Formato compra</label>
+                    <Input
+                      value={form.formato_compra ?? ''}
+                      onChange={(e) => setForm({ ...form, formato_compra: e.target.value })}
+                      placeholder="caja, palet, saco…"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Medidas</label>
+                    <Input
+                      value={form.medidas ?? ''}
+                      onChange={(e) => setForm({ ...form, medidas: e.target.value })}
+                      placeholder="30x40 cm, 1L, 250g…"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Color</label>
+                    <Input
+                      value={form.color ?? ''}
+                      onChange={(e) => setForm({ ...form, color: e.target.value })}
+                      placeholder="rojo, blanco…"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Peso neto (kg)</label>
+                    <Input
+                      type="number" step="0.001" min="0"
+                      value={form.peso_neto_kg ?? ''}
+                      onChange={(e) => setForm({ ...form, peso_neto_kg: e.target.value === '' ? null : Number(e.target.value) })}
+                      placeholder="0,000"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Peso bruto (kg)</label>
+                    <Input
+                      type="number" step="0.001" min="0"
+                      value={form.peso_bruto_kg ?? ''}
+                      onChange={(e) => setForm({ ...form, peso_bruto_kg: e.target.value === '' ? null : Number(e.target.value) })}
+                      placeholder="0,000"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">EAN / código de barras</label>
+                    <Input
+                      value={form.ean ?? ''}
+                      onChange={(e) => setForm({ ...form, ean: e.target.value })}
+                      placeholder="8410001234567"
+                      className="font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Descuento (%)</label>
+                    <Input
+                      type="number" step="0.01" min="0" max="100"
+                      value={form.descuento_pct ?? ''}
+                      onChange={(e) => setForm({ ...form, descuento_pct: e.target.value === '' ? null : Number(e.target.value) })}
+                      placeholder="0"
+                    />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Día pedido</label>
