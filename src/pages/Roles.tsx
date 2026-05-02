@@ -36,7 +36,7 @@ export default function Roles() {
     setError(null)
     try {
       const [rRes, pRes, lRes, permRes] = await Promise.all([
-        supabase.from('roles_v2').select('id, rol, descripcion, es_sistema, activo').order('rol'),
+        supabase.from('roles_v2').select('id, rol:nombre, descripcion, es_sistema, activo').order('nombre'),
         supabase.from('pantallas_app').select('codigo, nombre, modulo, orden').order('orden'),
         supabase.from('locales_compra_v2').select('id, nombre').eq('activo', true).order('nombre'),
         supabase.from('rol_permiso').select('rol, pantalla, local_id, modo'),
@@ -132,13 +132,13 @@ export default function Roles() {
           alert(`Ya existe un rol con el nombre "${nombre}"`); setSaving(false); return
         }
         const { error } = await supabase.from('roles_v2').insert({
-          rol: nombre, descripcion: editDesc || null, es_sistema: false, activo: true, permisos: [],
+          nombre, descripcion: editDesc || null, es_sistema: false, activo: true, permisos: [],
         })
         if (error) throw new Error(error.message)
       } else if (editing.rol !== nombre) {
         // Si cambia el nombre del rol, ojo con FK CASCADE en rol_permiso
         const { error } = await supabase.from('roles_v2')
-          .update({ rol: nombre, descripcion: editDesc || null })
+          .update({ nombre, descripcion: editDesc || null })
           .eq('id', editing.id)
         if (error) throw new Error(error.message)
       } else if ((editing.descripcion || '') !== editDesc) {
