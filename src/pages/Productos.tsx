@@ -31,6 +31,7 @@ interface Producto {
   dia_pedido: string | null
   dia_entrega: string | null
   stock_minimo: number | null
+  merma_pct?: number | null
   unidades_por_paquete: number | null
   forma_pago: string | null
   plazo_pago: string | null
@@ -58,6 +59,8 @@ export default function Productos() {
   const [aliasesPorProducto, setAliasesPorProducto] = useState<Map<number, string[]>>(new Map())
   // Aliases TPV elegidos al crear un producto NUEVO (se asocian tras el INSERT)
   const [aliasesNuevoSeleccionados, setAliasesNuevoSeleccionados] = useState<Set<string>>(new Set())
+  // Atributos personalizados (campos_extra_producto_v2) del producto editado
+  const [atributos, setAtributos] = useState<Array<{ campo: string; valor: string }>>([])
   const [categorias, setCategorias] = useState<CategoriaProducto[]>([])
   const [proveedores, setProveedores] = useState<ProveedorOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,6 +148,27 @@ export default function Productos() {
     setEditing(p)
     setCreating(false)
     setForm({ ...p })
+    setAtributos([])
+    void cargarMermaYAtributos(p)
+  }
+
+  /** Carga merma_pct (de producto_formatos) y atributos personalizados
+   * (campos_extra_producto_v2) del producto que se está editando. */
+  async function cargarMermaYAtributos(p: Producto) {
+    if (!p.compra_legacy_id) return
+    const compraId = p.compra_legacy_id
+    const [fmtRes, attrRes] = await Promise.all([
+      supabase.from('producto_formatos').select('merma_pct')
+        .eq('producto_id', compraId).eq('es_predeterminado', true).limit(1).maybeSingle(),
+      supabase.from('campos_extra_producto_v2').select('campo, valor')
+        .eq('producto_compra_id', compraId).order('campo'),
+    ])
+    if (fmtRes.data?.merma_pct != null) {
+      setForm((prev) => ({ ...prev, merma_pct: Number(fmtRes.data!.merma_pct) }))
+    }
+    if (attrRes.data) {
+      setAtributos(attrRes.data.map((a: { campo: string; valor: string }) => ({ campo: a.campo, valor: a.valor })))
+    }
   }
 
 function cancelEdit() {
@@ -251,6 +275,41 @@ function cancelEdit() {
       }
       const { error } = await supabase.from('productos_v2').update(payload).eq('id', editing.id)
       if (error) { alert(error.message); setSaving(false); return }
+    }
+
+    // Tras INSERT/UPDATE del producto: el trigger fn_sync_producto_to_compra ya
+    // creó/actualizó productos_compra_v2 + producto_formatos predeterminado.
+    // Aquí completamos lo que el trigger no toca: merma_pct + atributos extra.
+    // Para resolver el id de productos_compra_v2 (compra_legacy_id), recargamos
+    // el producto de venta.
+    const targetId = editing?.id ?? null
+    if (targetId != null) {
+      const { data: prodRow } = await supabase
+        .from('productos_v2').select('compra_legacy_id').eq('id', targetId).maybeSingle()
+      const compraId = prodRow?.compra_legacy_id ?? null
+      if (compraId) {
+        // Merma
+        if (form.merma_pct !== undefined) {
+          await supabase.from('producto_formatos')
+            .update({ merma_pct: form.merma_pct })
+            .eq('producto_id', compraId).eq('es_predeterminado', true)
+        }
+        // Atributos: borrar todos los que tenía y reinsertar los del form
+        await supabase.from('campos_extra_producto_v2')
+          .delete().eq('producto_compra_id', compraId)
+        const limpios = atributos
+          .map((a) => ({ campo: a.campo.trim(), valor: a.valor.trim() }))
+          .filter((a) => a.campo && a.valor)
+        if (limpios.length > 0) {
+          await supabase.from('campos_extra_producto_v2').insert(
+            limpios.map((a) => ({
+              producto_compra_id: compraId,
+              campo: a.campo,
+              valor: a.valor,
+            })),
+          )
+        }
+      }
     }
 
     setSaving(false)
@@ -542,6 +601,18 @@ function cancelEdit() {
                     />
                   </div>
                   <div>
+                    <label className="text-xs font-medium text-muted-foreground">Merma (%)</label>
+                    <Input
+                      type="number" step="0.01" min="0" max="100"
+                      value={form.merma_pct ?? ''}
+                      onChange={(e) => setForm({ ...form, merma_pct: e.target.value === '' ? null : Number(e.target.value) })}
+                      placeholder="0"
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Pérdida típica al manipular el producto (ej. 5% en kg de carne).
+                    </p>
+                  </div>
+                  <div>
                     <label className="text-xs font-medium text-muted-foreground">Día pedido</label>
                     <Input value={form.dia_pedido || ''} onChange={(e) => setForm({ ...form, dia_pedido: e.target.value })} placeholder="Lunes, Miércoles" />
                   </div>
@@ -557,6 +628,54 @@ function cancelEdit() {
                       onChange={(e) => setForm({ ...form, notas: e.target.value })}
                     />
                   </div>
+                </div>
+
+                {/* Atributos personalizados */}
+                <div className="mt-4 pt-3 border-t">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide">
+                      Atributos personalizados
+                    </label>
+                    <Button
+                      type="button" variant="outline" size="sm"
+                      onClick={() => setAtributos((prev) => [...prev, { campo: '', valor: '' }])}
+                    >
+                      <Plus size={12} className="mr-1" /> Añadir
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mb-2">
+                    Cualquier dato extra que no encaje en los campos estándar (ej. origen, lote,
+                    trazabilidad, certificación). Se guarda en campos_extra_producto_v2.
+                  </p>
+                  {atributos.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">— sin atributos —</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {atributos.map((a, i) => (
+                        <div key={i} className="flex gap-2">
+                          <Input
+                            placeholder="Nombre del atributo"
+                            value={a.campo}
+                            onChange={(e) => setAtributos((prev) => prev.map((x, j) => j === i ? { ...x, campo: e.target.value } : x))}
+                            className="max-w-[40%] font-mono text-xs"
+                          />
+                          <Input
+                            placeholder="Valor"
+                            value={a.valor}
+                            onChange={(e) => setAtributos((prev) => prev.map((x, j) => j === i ? { ...x, valor: e.target.value } : x))}
+                          />
+                          <Button
+                            type="button" variant="outline" size="icon"
+                            onClick={() => setAtributos((prev) => prev.filter((_, j) => j !== i))}
+                            className="shrink-0"
+                            title="Quitar"
+                          >
+                            <X size={12} />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
