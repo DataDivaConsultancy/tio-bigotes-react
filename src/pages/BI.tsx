@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils'
 import { BarChart3, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
@@ -267,6 +268,7 @@ async function fetchVentasPaginated(
 
 /* \u2500\u2500 Component \u2500\u2500 */
 export default function BI() {
+  const { localesAccesibles, isSuperadmin } = useAuth()
   const [fechaDesde, setFechaDesde] = useState(daysAgo(30))
   const [fechaHasta, setFechaHasta] = useState(yesterdayStr())
   // Label del preset elegido por el usuario (para resaltar UN solo chip aunque
@@ -294,7 +296,13 @@ export default function BI() {
         supabase.from('categorias_producto_v2').select('id, nombre').order('nombre'),
         supabase.from('vw_productos_dim').select('id, nombre, categoria_id'),
       ])
-      if (locRes.data) setLocales(locRes.data)
+      if (locRes.data) {
+        // Filtrar locales accesibles para el usuario (BI o cualquier permiso)
+        const accIds = localesAccesibles('BI')
+        const todos = isSuperadmin || (accIds.length === 1 && accIds[0] === -1)
+        const filtered = todos ? locRes.data : (locRes.data as Local[]).filter(l => accIds.includes(l.id))
+        setLocales(filtered)
+      }
       if (catRes.data) setCategorias(catRes.data)
       if (prodRes.data) setProductosCat(prodRes.data as ProductoCat[])
     }

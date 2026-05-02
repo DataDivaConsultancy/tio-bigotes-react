@@ -2,6 +2,16 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { supabase } from '@/lib/supabase'
 import { hashPassword } from '@/lib/utils'
 
+/**
+ * Permisos por (pantalla, local). local_id null = aplica a todos los locales
+ * (wildcard global). El modo es 'ver' (lectura) o 'escribir' (lectura+escritura).
+ */
+export interface PermisoLocal {
+  pantalla: string
+  local_id: number | null
+  modo: 'ver' | 'escribir'
+}
+
 export interface User {
   id: number
   nombre: string
@@ -9,7 +19,8 @@ export interface User {
   telefono?: string
   rol: string
   activo: boolean
-  permisos?: string[]
+  permisos?: string[]              // legacy: lista de pantallas (compat)
+  permisos_locales?: PermisoLocal[] // nuevo: matriz pantalla × local × modo
   must_change_password?: boolean
 }
 
@@ -20,7 +31,16 @@ interface AuthContextType {
   logout: () => void
   updateUser: (updates: Partial<User>) => void
   isSuperadmin: boolean
+  /** ¿El usuario puede ver al menos esa pantalla en algún local? */
   hasAccess: (screen: string) => boolean
+  /** ¿Puede ver esa pantalla en ese local concreto? */
+  hasLocalAccess: (screen: string, localId: number | null) => boolean
+  /** ¿Puede escribir en esa pantalla / local? */
+  canWrite: (screen: string, localId?: number | null) => boolean
+  /** Lista de IDs de locales en los que tiene acceso (para esa pantalla, o cualquier si screen omitido). */
+  localesAccesibles: (screen?: string) => number[]
+  /** Lista de IDs de locales en los que puede escribir. */
+  localesEditables: (screen?: string) => number[]
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -61,13 +81,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: false, error: 'Contraseña incorrecta' }
     }
 
-    // 2. Cargar datos completos + permisos efectivos del rol vía vista
-    const { data, error: e2 } = await supabase
-      .from('v_empleado_con_permisos')
-      .select('id, nombre, email, telefono, rol, activo, permisos_efectivos, must_change_password')
-      .eq('id', cred.id)
-      .single()
-
+    // 2. Cargar datos completos + permisos legacy (texto[]) + permisos por local
+    const [empRes, plRes] = await Promise.all([
+      supabase
+        .from('v_empleado_con_permisos')
+        .select('id, nombre, email, telefono, rol, activo, permisos_efectivos, must_change_password')
+        .eq('id', cred.id)
+        .single(),
+      supabase
+        .from('v_empleado_permisos_locales')
+        .select('pantalla, local_id, modo')
+        .eq('empleado_id', cred.id),
+    ])
+    const data = empRes.data
+    const e2 = empRes.error
     if (e2 || !data) {
       return { ok: false, error: 'No se pudieron cargar los datos del usuario' }
     }
@@ -80,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       rol: data.rol,
       activo: data.activo,
       permisos: Array.isArray(data.permisos_efectivos) ? data.permisos_efectivos : [],
+      permisos_locales: (plRes.data ?? []) as PermisoLocal[],
       must_change_password: data.must_change_password,
     }
 
@@ -115,12 +143,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasAccess = (screen: string) => {
     if (!user) return false
     if (isSuperadmin) return true
-    if (!user.permisos) return false
-    return user.permisos.includes(screen)
+    if (Array.isArray(user.permisos) && user.permisos.includes(screen)) return true
+    return (user.permisos_locales ?? []).some((p) => p.pantalla === screen)
+  }
+
+  /** Devuelve true si el usuario puede VER la pantalla en ese local concreto. */
+  const hasLocalAccess = (screen: string, localId: number | null) => {
+    if (!user) return false
+    if (isSuperadmin) return true
+    const pl = user.permisos_locales ?? []
+    // wildcard global (local_id null) cubre todos los locales
+    if (pl.some((p) => p.pantalla === screen && p.local_id === null)) return true
+    if (localId == null) return false
+    return pl.some((p) => p.pantalla === screen && p.local_id === localId)
+  }
+
+  /** Devuelve true si puede escribir en esa pantalla (en ese local concreto si se indica). */
+  const canWrite = (screen: string, localId?: number | null) => {
+    if (!user) return false
+    if (isSuperadmin) return true
+    const pl = user.permisos_locales ?? []
+    return pl.some((p) =>
+      p.pantalla === screen &&
+      p.modo === 'escribir' &&
+      (p.local_id === null || (localId != null && p.local_id === localId)),
+    )
+  }
+
+  /** IDs de locales accesibles (en cualquier modo). Si screen no se da, devuelve la unión de todos. */
+  const localesAccesibles = (screen?: string) => {
+    if (!user) return []
+    const pl = user.permisos_locales ?? []
+    const filtered = screen ? pl.filter((p) => p.pantalla === screen) : pl
+    const ids = new Set<number>()
+    let hasGlobal = false
+    for (const p of filtered) {
+      if (p.local_id == null) hasGlobal = true
+      else ids.add(p.local_id)
+    }
+    if (hasGlobal) return [-1] // marcador "todos los locales activos"
+    return Array.from(ids)
+  }
+
+  const localesEditables = (screen?: string) => {
+    if (!user) return []
+    const pl = (user.permisos_locales ?? []).filter((p) => p.modo === 'escribir')
+    const filtered = screen ? pl.filter((p) => p.pantalla === screen) : pl
+    const ids = new Set<number>()
+    let hasGlobal = false
+    for (const p of filtered) {
+      if (p.local_id == null) hasGlobal = true
+      else ids.add(p.local_id)
+    }
+    if (hasGlobal) return [-1]
+    return Array.from(ids)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateUser, isSuperadmin, hasAccess }}>
+    <AuthContext.Provider value={{
+      user, loading, login, logout, updateUser, isSuperadmin,
+      hasAccess, hasLocalAccess, canWrite, localesAccesibles, localesEditables,
+    }}>
       {children}
     </AuthContext.Provider>
   )

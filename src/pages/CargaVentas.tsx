@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -71,6 +72,7 @@ interface LocalRow {
 }
 
 export default function CargaVentas() {
+  const { localesEditables, isSuperadmin } = useAuth()
   const [step, setStep] = useState<ImportStep>('select')
   const [file, setFile] = useState<File | null>(null)
   const [parsedData, setParsedData] = useState<Record<string, string>[]>([])
@@ -106,8 +108,12 @@ export default function CargaVentas() {
       .eq('activo', true)
       .order('nombre')
     if (data) {
-      setLocales(data as LocalRow[])
-      if (data.length === 1) setSelectedLocalId((data[0] as LocalRow).id)
+      // Cargar ventas requiere ESCRITURA en CargaVentas — filtrar.
+      const editIds = localesEditables('CargaVentas')
+      const todos = isSuperadmin || (editIds.length === 1 && editIds[0] === -1)
+      const filtered = todos ? data : (data as LocalRow[]).filter(l => editIds.includes(l.id))
+      setLocales(filtered)
+      if (filtered.length === 1) setSelectedLocalId((filtered[0] as LocalRow).id)
     }
   }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { ArrowLeft, FileText, Plus, Minus, Search, AlertCircle, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +19,7 @@ type Cantidades = Record<string, number>
 
 export default function CrearPedido() {
   const navigate = useNavigate()
+  const { localesEditables, isSuperadmin } = useAuth()
   const [locales, setLocales] = useState<LocalMin[]>([])
   const [productosUnicos, setProductosUnicos] = useState<ProductoUnico[]>([])
   const [catalogo, setCatalogo] = useState<ItemCatalogo[]>([])
@@ -40,9 +42,12 @@ export default function CrearPedido() {
   useEffect(() => {
     Promise.all([listarLocales(), listarProductosUnicos()])
       .then(([l, p]) => {
-        setLocales(l)
+        const editIds = localesEditables('Pedidos')
+        const todos = isSuperadmin || (editIds.length === 1 && editIds[0] === -1)
+        const filtered = todos ? l : l.filter(li => editIds.includes(li.id))
+        setLocales(filtered)
         setProductosUnicos(p)
-        if (l.length === 1) setLocalId(l[0].id)
+        if (filtered.length === 1) setLocalId(filtered[0].id)
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoadingMaestros(false))
