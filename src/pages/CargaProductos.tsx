@@ -5,35 +5,83 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Upload, FileUp, CheckCircle, AlertTriangle, X, Download } from 'lucide-react'
 import Papa from 'papaparse'
 
+/** Marcador especial: guarda esa columna del CSV como atributo extra
+ * (campos_extra_producto_v2). El nombre del atributo será la cabecera del
+ * CSV normalizada. */
+const ATTR_EXTRA = '__attr_extra__'
+
 const EXPECTED_FIELDS = [
+  // ── Producto (productos_compra_v2) ──
   'nombre',
-  'cod_proveedor',
   'cod_interno',
-  'proveedor',
-  'precio',
-  'tipo_iva',
+  'medidas',
+  'color',
   'unidad_medida',
-  'unidad_minima_compra',
   'stock_minimo',
+  'activo',
+  // ── Formato predeterminado (producto_formatos) ──
+  'formato_compra',
+  'unidad_minima_compra',   // = unidades_por_paquete del paquete
+  'peso_neto_kg',
+  'peso_bruto_kg',
+  'ean',
+  'merma_pct',
+  // ── Proveedor / relación (producto_proveedor) ──
+  'proveedor',
+  'cod_proveedor',
   'dia_pedido',
   'dia_entrega',
+  'forma_pago',
+  'plazo_pago',
+  // ── Precio (proveedor_producto_precios) ──
+  'precio',
+  'tipo_iva',
+  'descuento_pct',
 ] as const
 
+/** Cada campo tiene un label visible y un grupo (para mostrar el dropdown
+ * de mapeo agrupado por sección). */
 const FIELD_LABELS: Record<string, string> = {
+  // Producto
   nombre: 'Nombre del producto *',
-  cod_proveedor: 'Código del proveedor',
   cod_interno: 'Código interno',
-  proveedor: 'Proveedor (nombre comercial)',
-  precio: 'Precio (€)',
-  tipo_iva: 'Tipo IVA',
-  unidad_medida: 'Unidad de medida',
-  unidad_minima_compra: 'Cantidad mínima compra',
+  medidas: 'Medidas (texto libre)',
+  color: 'Color',
+  unidad_medida: 'Unidad de medida (kg, l, unidad…)',
   stock_minimo: 'Stock mínimo',
+  activo: 'Activo (true/false)',
+  // Formato
+  formato_compra: 'Formato compra (caja, palet, saco…)',
+  unidad_minima_compra: 'Uds por paquete',
+  peso_neto_kg: 'Peso neto (kg)',
+  peso_bruto_kg: 'Peso bruto (kg)',
+  ean: 'EAN / código de barras',
+  merma_pct: 'Merma (%)',
+  // Proveedor
+  proveedor: 'Proveedor (nombre comercial)',
+  cod_proveedor: 'Código del proveedor',
   dia_pedido: 'Día de pedido',
   dia_entrega: 'Día de entrega',
+  forma_pago: 'Forma de pago',
+  plazo_pago: 'Plazo de pago',
+  // Precio
+  precio: 'Precio coste paquete (€)',
+  tipo_iva: 'Tipo IVA',
+  descuento_pct: 'Descuento (%)',
 }
 
-const NUMERIC_FIELDS = ['precio', 'unidad_minima_compra', 'stock_minimo']
+const FIELD_GROUPS: Record<string, string> = {
+  nombre: 'Producto', cod_interno: 'Producto', medidas: 'Producto',
+  color: 'Producto', unidad_medida: 'Producto', stock_minimo: 'Producto', activo: 'Producto',
+  formato_compra: 'Formato', unidad_minima_compra: 'Formato',
+  peso_neto_kg: 'Formato', peso_bruto_kg: 'Formato', ean: 'Formato', merma_pct: 'Formato',
+  proveedor: 'Proveedor', cod_proveedor: 'Proveedor',
+  dia_pedido: 'Proveedor', dia_entrega: 'Proveedor',
+  forma_pago: 'Proveedor', plazo_pago: 'Proveedor',
+  precio: 'Precio', tipo_iva: 'Precio', descuento_pct: 'Precio',
+}
+
+const NUMERIC_FIELDS = ['precio', 'unidad_minima_compra', 'stock_minimo', 'peso_neto_kg', 'peso_bruto_kg', 'merma_pct', 'descuento_pct']
 const REQUIRED_FIELDS = ['nombre']
 
 const IVA_OPTIONS_DB = ['General 21%', 'Reducido 10%', 'Superreducido 4%', 'Exento 0%']
@@ -41,7 +89,7 @@ const IVA_OPTIONS_DB = ['General 21%', 'Reducido 10%', 'Superreducido 4%', 'Exen
 type ExpectedField = (typeof EXPECTED_FIELDS)[number]
 
 interface ColumnMapping {
-  [csvColumn: string]: ExpectedField | ''
+  [csvColumn: string]: ExpectedField | typeof ATTR_EXTRA | ''
 }
 
 interface SavedMappingConfig {
@@ -278,7 +326,7 @@ export default function CargaProductos() {
     const f = e.target.files?.[0]; if (f) handleFile(f)
   }, [handleFile])
 
-  function updateMapping(csvCol: string, targetField: ExpectedField | '') {
+  function updateMapping(csvCol: string, targetField: ExpectedField | typeof ATTR_EXTRA | '') {
     setColumnMapping((prev) => ({ ...prev, [csvCol]: targetField }))
   }
 
@@ -330,21 +378,53 @@ export default function CargaProductos() {
         const n = parseFloat(s.replace(',', '.'))
         return isNaN(n) ? null : n
       }
+      const parseBool = (s: string) => {
+        if (!s) return undefined
+        const v = s.toLowerCase().trim()
+        if (['true','1','si','sí','yes','y','activo','x'].includes(v)) return true
+        if (['false','0','no','n','inactivo'].includes(v)) return false
+        return undefined
+      }
+
+      // Atributos personalizados: cualquier columna del CSV mapeada a ATTR_EXTRA
+      const attrs: Array<{ campo: string; valor: string }> = []
+      Object.entries(columnMapping).forEach(([csvCol, field]) => {
+        if (field === ATTR_EXTRA) {
+          const valor = (row[csvCol] ?? '').toString().trim()
+          if (valor) attrs.push({ campo: csvCol.trim(), valor })
+        }
+      })
 
       filasValidas.push({
         idx_csv: idx + 2,
+        // Producto
         nombre,
-        cod_proveedor: get('cod_proveedor') || null,
         cod_interno: get('cod_interno') || null,
-        proveedor_id,
-        precio: parseNum(get('precio')),
-        tipo_iva: normalizarTipoIva(get('tipo_iva')),
+        medidas: get('medidas') || null,
+        color: get('color') || null,
         unidad_medida: normalizarUnidadMedida(get('unidad_medida')),
-        unidad_minima_compra: parseNum(get('unidad_minima_compra')),
         stock_minimo: parseNum(get('stock_minimo')) ?? 0,
+        activo: parseBool(get('activo')) ?? true,
+        // Formato
+        formato_compra: get('formato_compra') || null,
+        unidad_minima_compra: parseNum(get('unidad_minima_compra')),
+        peso_neto_kg: parseNum(get('peso_neto_kg')),
+        peso_bruto_kg: parseNum(get('peso_bruto_kg')),
+        ean: get('ean') || null,
+        merma_pct: parseNum(get('merma_pct')),
+        // Proveedor
+        proveedor_id,
+        cod_proveedor: get('cod_proveedor') || null,
         dia_pedido: get('dia_pedido') || null,
         dia_entrega: get('dia_entrega') || null,
-        activo: true,
+        forma_pago: get('forma_pago') || null,
+        plazo_pago: get('plazo_pago') || null,
+        // Precio
+        precio: parseNum(get('precio')),
+        tipo_iva: normalizarTipoIva(get('tipo_iva')),
+        descuento_pct: parseNum(get('descuento_pct')),
+        // Atributos extra
+        attrs,
       })
     })
 
@@ -422,9 +502,27 @@ export default function CargaProductos() {
           creados++
         }
 
-        // ── 2. Relación producto↔proveedor + precio ──
+        // ── 2. Formato predeterminado: completar peso_neto/bruto/ean/merma/uds_paquete ──
+        // (existe siempre porque el trigger del producto lo crea)
+        if (productoId) {
+          const fmtUpd: Record<string, unknown> = {}
+          if (p.formato_compra != null) fmtUpd['formato_compra'] = p.formato_compra
+          if (p.unidad_minima_compra != null) {
+            fmtUpd['unidades_por_paquete'] = p.unidad_minima_compra
+            fmtUpd['factor_conversion'] = Math.max(Number(p.unidad_minima_compra) || 1, 1)
+          }
+          if (p.peso_neto_kg != null)  fmtUpd['peso_neto_kg']  = p.peso_neto_kg
+          if (p.peso_bruto_kg != null) fmtUpd['peso_bruto_kg'] = p.peso_bruto_kg
+          if (p.ean) fmtUpd['ean'] = p.ean
+          if (p.merma_pct != null) fmtUpd['merma_pct'] = p.merma_pct
+          if (Object.keys(fmtUpd).length > 0) {
+            await supabase.from('producto_formatos').update(fmtUpd)
+              .eq('producto_id', productoId).eq('es_predeterminado', true)
+          }
+        }
+
+        // ── 3. Relación producto↔proveedor + precio ──
         if (productoId && p.proveedor_id) {
-          // ¿Ya hay relación?
           const { data: rels } = await supabase
             .from('producto_proveedor').select('producto_id, proveedor_id')
             .eq('producto_id', productoId).eq('proveedor_id', p.proveedor_id).limit(1)
@@ -436,11 +534,21 @@ export default function CargaProductos() {
               forma_pago: p.forma_pago ?? null, plazo_pago: p.plazo_pago ?? null,
               es_principal: false, activo: true,
             })
+          } else {
+            // Actualizar la relación existente con cualquier dato nuevo del CSV
+            const relUpd: Record<string, unknown> = {}
+            if (p.cod_proveedor) relUpd['cod_proveedor'] = p.cod_proveedor
+            if (p.dia_pedido) relUpd['dia_pedido'] = p.dia_pedido
+            if (p.dia_entrega) relUpd['dia_entrega'] = p.dia_entrega
+            if (p.forma_pago) relUpd['forma_pago'] = p.forma_pago
+            if (p.plazo_pago) relUpd['plazo_pago'] = p.plazo_pago
+            if (Object.keys(relUpd).length > 0) {
+              await supabase.from('producto_proveedor').update(relUpd)
+                .eq('producto_id', productoId).eq('proveedor_id', p.proveedor_id)
+            }
           }
 
-          // Precio: si el CSV trae precio
           if (p.precio != null && p.precio > 0) {
-            // Localizar formato predeterminado
             const { data: fmt } = await supabase
               .from('producto_formatos').select('id, factor_conversion')
               .eq('producto_id', productoId).eq('es_predeterminado', true)
@@ -463,40 +571,56 @@ export default function CargaProductos() {
                 .eq('activa', true).limit(1).maybeSingle()
 
               if (!precioActivo) {
-                // No hay precio → crear
                 await supabase.from('proveedor_producto_precios').insert({
                   proveedor_id: p.proveedor_id, formato_id: fmt.id,
                   precio: precioUnitario, precio_paquete: precioPaquete,
-                  iva_pct: iva, moneda: 'EUR',
+                  iva_pct: iva,
+                  descuento_pct: p.descuento_pct ?? null,
+                  moneda: 'EUR',
                   vigente_desde: new Date().toISOString().slice(0, 10), activa: true,
                 })
                 precioCreado++
               } else {
-                // Hay precio activo. ¿Es el mismo?
                 const mismoUnit = Math.round(Number(precioActivo.precio) * 1e6) === Math.round(precioUnitario * 1e6)
                 const mismoPaq = Math.round(Number(precioActivo.precio_paquete || 0) * 1e6) === Math.round(precioPaquete * 1e6)
                 if (mismoUnit && mismoPaq) {
-                  // Idéntico, no hacer nada
                   precioNoTocado++
                 } else if (actualizarPrecioExistente) {
-                  // Cerrar el activo actual y crear uno nuevo
                   await supabase.from('proveedor_producto_precios')
                     .update({ activa: false, vigente_hasta: new Date().toISOString().slice(0, 10) })
                     .eq('id', precioActivo.id)
                   await supabase.from('proveedor_producto_precios').insert({
                     proveedor_id: p.proveedor_id, formato_id: fmt.id,
                     precio: precioUnitario, precio_paquete: precioPaquete,
-                    iva_pct: iva, moneda: 'EUR',
+                    iva_pct: iva,
+                    descuento_pct: p.descuento_pct ?? null,
+                    moneda: 'EUR',
                     vigente_desde: new Date().toISOString().slice(0, 10), activa: true,
                   })
                   precioActualizado++
                 } else {
-                  // No actualizar — el usuario lo desactivó
                   precioNoTocado++
                 }
               }
             }
           }
+        }
+
+        // ── 4. Atributos personalizados (campos_extra_producto_v2) ──
+        if (productoId && Array.isArray(p.attrs) && p.attrs.length > 0) {
+          // Upsert por (producto_compra_id, campo): borramos los que vamos a re-insertar
+          const campos = p.attrs.map((a: { campo: string }) => a.campo)
+          await supabase.from('campos_extra_producto_v2')
+            .delete()
+            .eq('producto_compra_id', productoId)
+            .in('campo', campos)
+          await supabase.from('campos_extra_producto_v2').insert(
+            p.attrs.map((a: { campo: string; valor: string }) => ({
+              producto_compra_id: productoId,
+              campo: a.campo,
+              valor: a.valor,
+            })),
+          )
         }
       } catch (e: any) {
         errores.push({ row: idx_csv, motivo: e?.message ?? 'error desconocido' })
@@ -634,13 +758,18 @@ export default function CargaProductos() {
                     </div>
                     <select
                       value={columnMapping[col] || ''}
-                      onChange={(e) => updateMapping(col, e.target.value as ExpectedField | '')}
-                      className="px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      onChange={(e) => updateMapping(col, e.target.value as ExpectedField | typeof ATTR_EXTRA | '')}
+                      className="px-3 py-2 text-sm bg-background border rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 min-w-[260px]"
                     >
                       <option value="">— Ignorar esta columna —</option>
-                      {EXPECTED_FIELDS.map((f) => (
-                        <option key={f} value={f}>{FIELD_LABELS[f]}</option>
+                      {(['Producto','Formato','Proveedor','Precio'] as const).map((grp) => (
+                        <optgroup key={grp} label={grp}>
+                          {EXPECTED_FIELDS.filter((f) => FIELD_GROUPS[f] === grp).map((f) => (
+                            <option key={f} value={f}>{FIELD_LABELS[f]}</option>
+                          ))}
+                        </optgroup>
                       ))}
+                      <option value={ATTR_EXTRA}>★ Guardar como atributo personalizado</option>
                     </select>
                   </div>
                 ))}
