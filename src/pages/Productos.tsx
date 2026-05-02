@@ -650,8 +650,20 @@ function cancelEdit() {
                     <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground">
                       {p.proveedor_nombre || '—'}
                     </td>
-                    <td className="py-3 px-4 text-right hidden md:table-cell font-medium">
-                      {p.precio_compra != null ? formatCurrency(p.precio_compra) : '—'}
+                    <td className="py-3 px-4 text-right hidden md:table-cell">
+                      {p.precio_compra != null ? (
+                        <div>
+                          <div className="font-medium tabular-nums">
+                            {formatCurrency(p.precio_compra)}
+                            <span className="text-[10px] text-muted-foreground"> /paq</span>
+                          </div>
+                          {p.unidades_por_paquete && p.unidades_por_paquete > 0 && (
+                            <div className="text-[10px] text-muted-foreground tabular-nums">
+                              unidad: {(p.precio_compra / p.unidades_por_paquete).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                            </div>
+                          )}
+                        </div>
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="py-3 px-4 hidden lg:table-cell text-muted-foreground text-xs">{p.tipo_iva || '—'}</td>
                     <td className="py-3 px-4 text-right">
