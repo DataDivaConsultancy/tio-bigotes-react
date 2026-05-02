@@ -279,6 +279,11 @@ export default function BI() {
   const [productosCat, setProductosCat] = useState<ProductoCat[]>([])
   const [selectedLocal, setSelectedLocal] = useState<string>('')
   const [selectedCategorias, setSelectedCategorias] = useState<string[]>([])
+  // Drill-down INTERACTIVO (click en filas de la tabla 'Ventas por categoría').
+  // Es independiente del filtro 'Categoría' del header. Solo afecta a la
+  // tabla 'Desglose por producto'. Se guardan NOMBRES de categoría
+  // (incluido el especial 'Sin categoría').
+  const [drillCategorias, setDrillCategorias] = useState<Set<string>>(new Set())
   const [selectedProductos, setSelectedProductos] = useState<string[]>([])
   const [ventas, setVentas] = useState<VentaRow[]>([])
   const [ventasPrevYear, setVentasPrevYear] = useState<VentaRow[]>([])
@@ -491,16 +496,36 @@ export default function BI() {
     })
   }, [categorySalesRaw, catSort])
 
+  // Para 'Desglose por producto': aplicar drill por categoría si hay alguna.
+  const ventasParaDesglose = useMemo(() => {
+    if (drillCategorias.size === 0) return filteredVentas
+    return filteredVentas.filter((v) => {
+      const catId = getCatId(v)
+      const catName = catId
+        ? (categorias.find((c) => c.id === catId)?.nombre || `Cat ${catId}`)
+        : 'Sin categoría'
+      return drillCategorias.has(catName)
+    })
+  }, [filteredVentas, drillCategorias, categorias, prodToCat])
+
+  const productoMapDrill = useMemo(() => {
+    const m = new Map<string, number>()
+    ventasParaDesglose.forEach((v) => {
+      m.set(v.producto, (m.get(v.producto) || 0) + v.importe_total)
+    })
+    return m
+  }, [ventasParaDesglose])
   const cantidadMap = new Map<string, number>()
-  filteredVentas.forEach((v) => {
+  ventasParaDesglose.forEach((v) => {
     cantidadMap.set(v.producto, (cantidadMap.get(v.producto) || 0) + v.cantidad)
   })
-  const productBreakdownRaw: ProductBreakdown[] = [...productoMap.entries()]
+  const importeDesglose = ventasParaDesglose.reduce((s, v) => s + v.importe_total, 0)
+  const productBreakdownRaw: ProductBreakdown[] = [...productoMapDrill.entries()]
     .map(([producto, importe]) => ({
       producto,
       cantidad: cantidadMap.get(producto) || 0,
       importe: Math.round(importe * 100) / 100,
-      porcentaje: totalImporte > 0 ? Math.round((importe / totalImporte) * 10000) / 100 : 0,
+      porcentaje: importeDesglose > 0 ? Math.round((importe / importeDesglose) * 10000) / 100 : 0,
     }))
   const productBreakdown = useMemo(() => {
     const arr = [...productBreakdownRaw]
@@ -790,8 +815,33 @@ export default function BI() {
                   <tbody>
                     {categorySales.map((row) => {
                       const delta = row.importePY > 0 ? ((row.importe - row.importePY) / row.importePY) * 100 : null
+                      const seleccionada = drillCategorias.has(row.nombre)
+                      const handleClick = (e: React.MouseEvent) => {
+                        const ctrl = e.ctrlKey || e.metaKey
+                        setDrillCategorias((prev) => {
+                          const next = new Set(prev)
+                          if (ctrl) {
+                            if (next.has(row.nombre)) next.delete(row.nombre)
+                            else next.add(row.nombre)
+                          } else {
+                            // Click sin ctrl: si solo está esa, quitar; si no, reemplazar con esa
+                            if (next.size === 1 && next.has(row.nombre)) next.clear()
+                            else { next.clear(); next.add(row.nombre) }
+                          }
+                          return next
+                        })
+                      }
                       return (
-                        <tr key={row.nombre} className="border-b last:border-0 hover:bg-muted/50">
+                        <tr
+                          key={row.nombre}
+                          onClick={handleClick}
+                          className={`border-b last:border-0 cursor-pointer transition-colors ${
+                            seleccionada
+                              ? 'bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50'
+                              : 'hover:bg-muted/50'
+                          }`}
+                          title="Click: filtrar desglose por esta categoría · Ctrl/Cmd+click: añadir a la selección · Click en la activa: deseleccionar"
+                        >
                           <td className="py-2.5 pr-4 font-medium">{row.nombre}</td>
                           <td className="py-2.5 pr-4 text-right">{formatNumber(row.cantidad, 0)}</td>
                           <td className="py-2.5 pr-4 text-right font-medium">{formatCurrency(row.importe)}</td>
@@ -849,7 +899,22 @@ export default function BI() {
           {/* ── Product breakdown table ── */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Desglose por producto</CardTitle>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle className="text-base">
+                  Desglose por producto
+                  {drillCategorias.size > 0 && (
+                    <span className="ml-2 inline-flex items-center gap-1.5 text-xs font-normal text-blue-700 bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 px-2 py-0.5 rounded-full">
+                      Filtrado por: {Array.from(drillCategorias).join(', ')}
+                      <button
+                        type="button"
+                        onClick={() => setDrillCategorias(new Set())}
+                        className="ml-1 hover:text-blue-900"
+                        title="Quitar filtro"
+                      >×</button>
+                    </span>
+                  )}
+                </CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
