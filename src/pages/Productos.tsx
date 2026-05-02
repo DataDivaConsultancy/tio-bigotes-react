@@ -56,6 +56,8 @@ type TipoFilter = 'todos' | 'venta' | 'compra' | 'ambos'
 export default function Productos() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [aliasesPorProducto, setAliasesPorProducto] = useState<Map<number, string[]>>(new Map())
+  // Aliases TPV elegidos al crear un producto NUEVO (se asocian tras el INSERT)
+  const [aliasesNuevoSeleccionados, setAliasesNuevoSeleccionados] = useState<Set<string>>(new Set())
   const [categorias, setCategorias] = useState<CategoriaProducto[]>([])
   const [proveedores, setProveedores] = useState<ProveedorOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,10 +147,11 @@ export default function Productos() {
     setForm({ ...p })
   }
 
-  function cancelEdit() {
+function cancelEdit() {
     setEditing(null)
     setCreating(false)
     setForm({})
+    setAliasesNuevoSeleccionados(new Set())
   }
 
   async function save() {
@@ -195,7 +198,6 @@ export default function Productos() {
     }
 
     if (creating) {
-      // New products default to vendible + producible for venta type
       if (tipo === 'venta' || tipo === 'ambos') {
         payload.es_vendible = true
         payload.es_producible = true
@@ -204,8 +206,29 @@ export default function Productos() {
         payload.es_producible = false
       }
       payload.afecta_forecast = tipo !== 'compra'
-      const { error } = await supabase.from('productos_v2').insert(payload)
+      const { data: created, error } = await supabase.from('productos_v2').insert(payload).select('id').single()
       if (error) { alert(error.message); setSaving(false); return }
+
+      // Asociar aliases TPV elegidos durante la creación
+      if (created?.id && aliasesNuevoSeleccionados.size > 0) {
+        const errs: string[] = []
+        for (const alias of aliasesNuevoSeleccionados) {
+          const { data: r, error: aliasErr } = await supabase.rpc('rpc_crear_alias_y_reprocesar', {
+            p_alias_tpv: alias,
+            p_producto_id: created.id,
+            p_notas: null,
+          })
+          if (aliasErr) errs.push(`${alias}: ${aliasErr.message}`)
+          else if (r && typeof r === 'object' && 'error' in r && (r as { error?: string }).error) {
+            errs.push(`${alias}: ${(r as { error: string }).error}`)
+          }
+        }
+        // Refrescar matview de pendientes en background
+        void supabase.rpc('rpc_refresh_alias_pendientes')
+        if (errs.length > 0) {
+          alert(`Producto creado pero hubo errores asociando aliases:\n${errs.join('\n')}`)
+        }
+      }
     } else if (editing) {
       // Si el nombre cambió, primero llamar a la RPC que auto-crea alias TPV
       // si el nombre viejo aparecía en ventas. Esto preserva el match en
@@ -390,8 +413,14 @@ export default function Productos() {
               </div>
             </div>
 
-            {/* Aliases TPV - solo al editar producto existente */}
+            {/* Aliases TPV: editor completo al editar; selector de pendientes al crear */}
             {editing && <AliasTpvSection productoId={editing.id} productoNombre={editing.nombre} productoTipo={editing.tipo} />}
+            {creating && (form.tipo === 'venta' || form.tipo === 'ambos') && (
+              <AliasTpvPickerNuevo
+                seleccionados={aliasesNuevoSeleccionados}
+                onChange={setAliasesNuevoSeleccionados}
+              />
+            )}
 
             {/* Venta fields */}
             {showVentaFields && (
@@ -1013,6 +1042,104 @@ function AliasTpvSection({ productoId, productoNombre, productoTipo }: { product
       <p className="text-[10px] text-muted-foreground">
         Al asociar un alias, las ventas históricas con ese nombre se reasignan a este producto automáticamente.
       </p>
+    </div>
+  )
+}
+
+/* ─── Selector de aliases TPV pendientes para usar AL CREAR un producto ─── */
+interface AliasPendienteSimple {
+  alias_tpv: string
+  n_ventas: number
+  importe_total: number | null
+}
+
+function AliasTpvPickerNuevo({
+  seleccionados, onChange,
+}: { seleccionados: Set<string>; onChange: (s: Set<string>) => void }) {
+  const [pendientes, setPendientes] = useState<AliasPendienteSimple[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true)
+      const { data } = await supabase
+        .from('vw_alias_pendientes')
+        .select('alias_tpv, n_ventas, importe_total')
+        .order('n_ventas', { ascending: false })
+      setPendientes((data ?? []) as AliasPendienteSimple[])
+      setLoading(false)
+    })()
+  }, [])
+
+  const filtered = pendientes.filter((a) =>
+    !search || a.alias_tpv.toLowerCase().includes(search.toLowerCase()),
+  )
+
+  function toggle(alias: string) {
+    const next = new Set(seleccionados)
+    if (next.has(alias)) next.delete(alias)
+    else next.add(alias)
+    onChange(next)
+  }
+
+  return (
+    <div className="pt-3 border-t">
+      <h3 className="text-sm font-semibold uppercase tracking-wide mb-2">
+        Aliases TPV pendientes — opcional
+      </h3>
+      <p className="text-xs text-muted-foreground mb-2">
+        Marca los nombres del TPV que correspondan a este producto.
+        Se asociarán al guardar; ventas históricas con ese alias se
+        atribuirán automáticamente al nuevo producto.
+      </p>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Cargando aliases…</p>
+      ) : pendientes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No hay aliases pendientes.</p>
+      ) : (
+        <>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar alias…"
+            className="mb-2 w-full max-w-md px-3 py-1.5 text-sm border rounded-md bg-background"
+          />
+          {seleccionados.size > 0 && (
+            <p className="mb-2 text-xs text-emerald-600 font-medium">
+              {seleccionados.size} alias seleccionado{seleccionados.size === 1 ? '' : 's'} para asociar al guardar.
+            </p>
+          )}
+          <div className="max-h-64 overflow-y-auto rounded border divide-y">
+            {filtered.slice(0, 100).map((a) => (
+              <label
+                key={a.alias_tpv}
+                className="flex items-center gap-3 px-3 py-1.5 hover:bg-muted/40 cursor-pointer text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={seleccionados.has(a.alias_tpv)}
+                  onChange={() => toggle(a.alias_tpv)}
+                />
+                <span className="flex-1 font-medium">{a.alias_tpv}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {a.n_ventas.toLocaleString('es-ES')} ventas
+                </span>
+                {a.importe_total != null && (
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {Number(a.importe_total).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                  </span>
+                )}
+              </label>
+            ))}
+            {filtered.length > 100 && (
+              <p className="px-3 py-2 text-xs text-muted-foreground text-center">
+                Mostrando 100 de {filtered.length}. Filtra para encontrar más.
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
