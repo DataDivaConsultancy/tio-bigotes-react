@@ -470,13 +470,19 @@ function cancelEdit() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Precio compra (EUR)</label>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Precio coste paquete (EUR)
+                    </label>
                     <Input
                       type="number" step="0.01" min="0"
                       value={form.precio_compra ?? ''}
                       onChange={(e) => setForm({ ...form, precio_compra: e.target.value ? Number(e.target.value) : null })}
+                      placeholder="Precio del paquete completo"
                     />
-                        </div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Es el precio de la unidad mínima de compra (caja, palet, lote…).
+                    </p>
+                  </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">IVA</label>
                     <select
@@ -496,12 +502,36 @@ function cancelEdit() {
                     <Input value={form.cod_proveedor || ''} onChange={(e) => setForm({ ...form, cod_proveedor: e.target.value })} />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-muted-foreground">Uds por paquete</label>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Uds / kg / l por paquete
+                    </label>
                     <Input
-                      type="number" step="1" min="1"
-                      value={form.unidades_por_paquete ?? 1}
-                      onChange={(e) => setForm({ ...form, unidades_por_paquete: Number(e.target.value) || 1 })}
+                      type="number" step="any" min="0"
+                      value={form.unidades_por_paquete ?? ''}
+                      onChange={(e) => setForm({ ...form, unidades_por_paquete: e.target.value ? Number(e.target.value) : null })}
+                      placeholder="Ej: 12 (caja de 12 ud), 25 (saco de 25 kg)"
                     />
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Cuántas unidades / kg / litros vienen en un paquete.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Precio unitario (calculado)
+                    </label>
+                    <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/30 px-3 py-2 text-sm font-mono">
+                      {(() => {
+                        const p = form.precio_compra
+                        const u = form.unidades_por_paquete
+                        if (!p || p <= 0) return <span className="text-muted-foreground">— sin precio —</span>
+                        if (!u || u <= 0) return <span className="text-muted-foreground">— sin uds —</span>
+                        const pu = p / u
+                        return <span className="text-emerald-600 font-semibold">{pu.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
+                      })()}
+                    </div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      precio paquete ÷ uds por paquete (auto)
+                    </p>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-muted-foreground">Stock mínimo</label>
