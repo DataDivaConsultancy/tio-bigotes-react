@@ -1053,26 +1053,52 @@ interface AliasPendienteSimple {
   importe_total: number | null
 }
 
+interface AliasYaAsignado {
+  alias_tpv: string
+  n_ventas: number
+  producto_id: number
+  producto_nombre: string
+}
+
 function AliasTpvPickerNuevo({
   seleccionados, onChange,
 }: { seleccionados: Set<string>; onChange: (s: Set<string>) => void }) {
   const [pendientes, setPendientes] = useState<AliasPendienteSimple[]>([])
+  const [yaAsignados, setYaAsignados] = useState<AliasYaAsignado[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [mostrarAsignados, setMostrarAsignados] = useState(false)
 
   useEffect(() => {
     void (async () => {
       setLoading(true)
-      const { data } = await supabase
-        .from('vw_alias_pendientes')
-        .select('alias_tpv, n_ventas, importe_total')
-        .order('n_ventas', { ascending: false })
-      setPendientes((data ?? []) as AliasPendienteSimple[])
+      const [pRes, aRes] = await Promise.all([
+        supabase
+          .from('vw_alias_pendientes')
+          .select('alias_tpv, n_ventas, importe_total')
+          .order('n_ventas', { ascending: false }),
+        supabase
+          .from('vw_alias_activos')
+          .select('alias_tpv, producto_id, producto_nombre, n_ventas_mapeadas')
+          .order('n_ventas_mapeadas', { ascending: false, nullsFirst: false }),
+      ])
+      setPendientes((pRes.data ?? []) as AliasPendienteSimple[])
+      setYaAsignados(((aRes.data ?? []) as Array<{
+        alias_tpv: string; producto_id: number; producto_nombre: string; n_ventas_mapeadas: number | null
+      }>).map(a => ({
+        alias_tpv: a.alias_tpv,
+        producto_id: a.producto_id,
+        producto_nombre: a.producto_nombre,
+        n_ventas: a.n_ventas_mapeadas ?? 0,
+      })))
       setLoading(false)
     })()
   }, [])
 
   const filtered = pendientes.filter((a) =>
+    !search || a.alias_tpv.toLowerCase().includes(search.toLowerCase()),
+  )
+  const filteredAsignados = yaAsignados.filter((a) =>
     !search || a.alias_tpv.toLowerCase().includes(search.toLowerCase()),
   )
 
@@ -1138,6 +1164,49 @@ function AliasTpvPickerNuevo({
               </p>
             )}
           </div>
+
+          {/* Aliases ya asignados a otros productos — colapsable */}
+          {filteredAsignados.length > 0 && (
+            <div className="mt-4 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setMostrarAsignados(!mostrarAsignados)}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1"
+              >
+                <span>{mostrarAsignados ? '▾' : '▸'}</span>
+                Aliases ya asignados a otro producto ({filteredAsignados.length})
+              </button>
+              {mostrarAsignados && (
+                <>
+                  <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/20 rounded px-2 py-1.5">
+                    ⚠ Si marcas alguno aquí, las ventas históricas de ese alias se REASIGNARÁN
+                    al nuevo producto y se quitarán del producto que las tenía.
+                  </p>
+                  <div className="mt-2 max-h-48 overflow-y-auto rounded border divide-y bg-muted/10">
+                    {filteredAsignados.slice(0, 100).map((a) => (
+                      <label
+                        key={a.alias_tpv}
+                        className="flex items-center gap-3 px-3 py-1.5 hover:bg-muted/40 cursor-pointer text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={seleccionados.has(a.alias_tpv)}
+                          onChange={() => toggle(a.alias_tpv)}
+                        />
+                        <span className="flex-1 font-medium">{a.alias_tpv}</span>
+                        <span className="text-xs text-muted-foreground">
+                          → <span className="font-medium text-foreground">{a.producto_nombre}</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {a.n_ventas.toLocaleString('es-ES')}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
