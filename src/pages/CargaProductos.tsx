@@ -100,7 +100,10 @@ export default function CargaProductos() {
   const [proveedores, setProveedores] = useState<Map<string, number>>(new Map())
   const [dragOver, setDragOver] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
-  const [actualizar, setActualizar] = useState(true)  // ¿actualizar productos existentes (por nombre) o solo crear?
+  // Si el producto (match por cod_interno o nombre) ya existe → actualizar sus datos básicos
+  const [actualizarProducto, setActualizarProducto] = useState(true)
+  // Si el (producto, proveedor) ya tiene precio activo y el CSV trae uno → ¿sobrescribir?
+  const [actualizarPrecioExistente, setActualizarPrecioExistente] = useState(false)
 
   useEffect(() => {
     loadSavedMapping()
@@ -308,69 +311,163 @@ export default function CargaProductos() {
     let creados = 0
     let actualizados = 0
 
-    // Procesar fila a fila para hacer upsert por nombre+proveedor
+    // Procesar fila a fila con lógica multi-proveedor:
+    //   1) Match producto por cod_interno (case-insensitive). Si no, por nombre exacto.
+    //      Si existe + actualizarProducto → UPDATE datos. Si no → INSERT.
+    //   2) Si trae proveedor:
+    //        a) Si NO hay relación (producto, proveedor) → crear + crear precio.
+    //        b) Si SÍ hay relación + precio activo distinto:
+    //             - actualizarPrecioExistente=true → cerrar precio anterior + crear nuevo (histórico).
+    //             - actualizarPrecioExistente=false → ignorar (acumula en preciosNoActualizados).
+    let precioCreado = 0
+    let precioActualizado = 0
+    let precioNoTocado = 0
+    const COLS_PRODUCTO = new Set(['nombre','cod_interno','medidas','color','unidad_medida','unidad_minima_compra','unidades_por_paquete','stock_minimo','producto_venta_id','activo'])
+
     for (let i = 0; i < filasValidas.length; i++) {
       const f = filasValidas[i]
       const { idx_csv, ...payload } = f
+      const p = payload as Record<string, any>
 
       try {
-        // Buscar si existe (por nombre + proveedor)
-        let existsId: number | null = null
-        if (actualizar) {
-          let q = supabase.from('productos_compra_v2').select('id').eq('nombre', payload.nombre).limit(1)
-          // proveedor_id se gestiona en producto_proveedor; aquí solo matcheamos por nombre
-          const { data: foundData } = await q
-          if (foundData && foundData.length > 0) existsId = foundData[0].id
+        // ── 1. Match producto ──
+        let productoId: number | null = null
+        const codInternoNorm = p.cod_interno ? String(p.cod_interno).trim().toLowerCase() : null
+        if (codInternoNorm) {
+          // Buscar por cod_interno con LOWER+TRIM para soportar variaciones de case
+          const { data } = await supabase
+            .from('productos_compra_v2')
+            .select('id, cod_interno')
+            .ilike('cod_interno', codInternoNorm)
+            .limit(50)
+          const found = (data ?? []).find((r: any) =>
+            String(r.cod_interno || '').trim().toLowerCase() === codInternoNorm,
+          )
+          if (found) productoId = found.id
+        }
+        if (!productoId && p.nombre) {
+          // Fallback: match por nombre normalizado
+          const { data } = await supabase
+            .from('productos_compra_v2')
+            .select('id, nombre')
+            .ilike('nombre', String(p.nombre).trim())
+            .limit(10)
+          const found = (data ?? []).find((r: any) =>
+            String(r.nombre || '').trim().toLowerCase() === String(p.nombre).trim().toLowerCase(),
+          )
+          if (found) productoId = found.id
         }
 
-        if (existsId) {
-          // UPDATE
-          // Filtrar payload para UPDATE
-          const COLS_PRODUCTO_U = new Set(['nombre','cod_interno','medidas','color','unidad_medida','unidad_minima_compra','unidades_por_paquete','stock_minimo','producto_venta_id','activo'])
+        if (productoId && actualizarProducto) {
+          // UPDATE producto
           const productoUpd: Record<string, unknown> = {}
-          for (const k of Object.keys(payload)) {
-            if (COLS_PRODUCTO_U.has(k)) productoUpd[k] = (payload as Record<string, unknown>)[k]
+          for (const k of Object.keys(p)) {
+            if (COLS_PRODUCTO.has(k)) productoUpd[k] = p[k]
           }
           const { error: updErr } = await supabase
-            .from('productos_compra_v2')
-            .update(productoUpd)
-            .eq('id', existsId)
-          if (updErr) errores.push({ row: idx_csv, motivo: updErr.message })
-          else actualizados++
-        } else {
-          // INSERT
-          // Filtrar payload: campos como proveedor_id, cod_proveedor, dia_*, forma_pago,
-          // plazo_pago, precio, tipo_iva ya no existen en productos_compra_v2
-          // (viven en producto_proveedor / proveedor_producto_precios)
-          const COLS_PRODUCTO = new Set(['nombre','cod_interno','medidas','color','unidad_medida','unidad_minima_compra','unidades_por_paquete','stock_minimo','producto_venta_id','activo'])
+            .from('productos_compra_v2').update(productoUpd).eq('id', productoId)
+          if (updErr) { errores.push({ row: idx_csv, motivo: updErr.message }); continue }
+          actualizados++
+        } else if (!productoId) {
+          // INSERT producto
           const productoPayload: Record<string, unknown> = {}
-          for (const k of Object.keys(payload)) {
-            if (COLS_PRODUCTO.has(k)) productoPayload[k] = (payload as Record<string, unknown>)[k]
+          for (const k of Object.keys(p)) {
+            if (COLS_PRODUCTO.has(k)) productoPayload[k] = p[k]
           }
-          const { data: insData, error: insErr } = await supabase.from('productos_compra_v2').insert(productoPayload).select('id').single()
-          // Si el CSV traía proveedor, crear también la relación en producto_proveedor
-          if (!insErr && insData && (payload as any).proveedor_id) {
+          const { data: insData, error: insErr } = await supabase
+            .from('productos_compra_v2').insert(productoPayload).select('id').single()
+          if (insErr) { errores.push({ row: idx_csv, motivo: insErr.message }); continue }
+          productoId = insData!.id
+          creados++
+        }
+
+        // ── 2. Relación producto↔proveedor + precio ──
+        if (productoId && p.proveedor_id) {
+          // ¿Ya hay relación?
+          const { data: rels } = await supabase
+            .from('producto_proveedor').select('producto_id, proveedor_id')
+            .eq('producto_id', productoId).eq('proveedor_id', p.proveedor_id).limit(1)
+          if (!rels || rels.length === 0) {
             await supabase.from('producto_proveedor').insert({
-              producto_id: insData.id,
-              proveedor_id: (payload as any).proveedor_id,
-              cod_proveedor: (payload as any).cod_proveedor ?? null,
-              dia_pedido: (payload as any).dia_pedido ?? null,
-              dia_entrega: (payload as any).dia_entrega ?? null,
-              forma_pago: (payload as any).forma_pago ?? null,
-              plazo_pago: (payload as any).plazo_pago ?? null,
-              es_principal: true,
-              activo: true,
+              producto_id: productoId, proveedor_id: p.proveedor_id,
+              cod_proveedor: p.cod_proveedor ?? null,
+              dia_pedido: p.dia_pedido ?? null, dia_entrega: p.dia_entrega ?? null,
+              forma_pago: p.forma_pago ?? null, plazo_pago: p.plazo_pago ?? null,
+              es_principal: false, activo: true,
             })
           }
-          if (insErr) errores.push({ row: idx_csv, motivo: insErr.message })
-          else creados++
+
+          // Precio: si el CSV trae precio
+          if (p.precio != null && p.precio > 0) {
+            // Localizar formato predeterminado
+            const { data: fmt } = await supabase
+              .from('producto_formatos').select('id, factor_conversion')
+              .eq('producto_id', productoId).eq('es_predeterminado', true)
+              .limit(1).maybeSingle()
+            if (fmt) {
+              const factor = Math.max(Number(fmt.factor_conversion) || 1, 1)
+              const precioPaquete = Number(p.precio)
+              const precioUnitario = precioPaquete / factor
+              const ivaRaw = String(p.tipo_iva || '')
+              const iva = ivaRaw.includes('21') ? 21
+                : ivaRaw.includes('10') ? 10
+                : ivaRaw.includes('4') ? 4
+                : ivaRaw.includes('0') || ivaRaw.toLowerCase().includes('exento') ? 0
+                : 21
+
+              const { data: precioActivo } = await supabase
+                .from('proveedor_producto_precios')
+                .select('id, precio, precio_paquete')
+                .eq('proveedor_id', p.proveedor_id).eq('formato_id', fmt.id)
+                .eq('activa', true).limit(1).maybeSingle()
+
+              if (!precioActivo) {
+                // No hay precio → crear
+                await supabase.from('proveedor_producto_precios').insert({
+                  proveedor_id: p.proveedor_id, formato_id: fmt.id,
+                  precio: precioUnitario, precio_paquete: precioPaquete,
+                  iva_pct: iva, moneda: 'EUR',
+                  vigente_desde: new Date().toISOString().slice(0, 10), activa: true,
+                })
+                precioCreado++
+              } else {
+                // Hay precio activo. ¿Es el mismo?
+                const mismoUnit = Math.round(Number(precioActivo.precio) * 1e6) === Math.round(precioUnitario * 1e6)
+                const mismoPaq = Math.round(Number(precioActivo.precio_paquete || 0) * 1e6) === Math.round(precioPaquete * 1e6)
+                if (mismoUnit && mismoPaq) {
+                  // Idéntico, no hacer nada
+                  precioNoTocado++
+                } else if (actualizarPrecioExistente) {
+                  // Cerrar el activo actual y crear uno nuevo
+                  await supabase.from('proveedor_producto_precios')
+                    .update({ activa: false, vigente_hasta: new Date().toISOString().slice(0, 10) })
+                    .eq('id', precioActivo.id)
+                  await supabase.from('proveedor_producto_precios').insert({
+                    proveedor_id: p.proveedor_id, formato_id: fmt.id,
+                    precio: precioUnitario, precio_paquete: precioPaquete,
+                    iva_pct: iva, moneda: 'EUR',
+                    vigente_desde: new Date().toISOString().slice(0, 10), activa: true,
+                  })
+                  precioActualizado++
+                } else {
+                  // No actualizar — el usuario lo desactivó
+                  precioNoTocado++
+                }
+              }
+            }
+          }
         }
       } catch (e: any) {
         errores.push({ row: idx_csv, motivo: e?.message ?? 'error desconocido' })
       }
-
       setImportProgress({ done: i + 1, total: filasValidas.length })
     }
+
+    // Mensaje resumen extendido
+    const msgs: string[] = []
+    if (precioCreado > 0) msgs.push(`${precioCreado} precio${precioCreado === 1 ? '' : 's'} de proveedor creado${precioCreado === 1 ? '' : 's'}`)
+    if (precioActualizado > 0) msgs.push(`${precioActualizado} actualizado${precioActualizado === 1 ? '' : 's'}`)
+    if (precioNoTocado > 0) msgs.push(`${precioNoTocado} sin tocar`)
 
     // Guardar mapping para futuras importaciones
     const mappingToSave = { ...columnMapping }
@@ -385,7 +482,7 @@ export default function CargaProductos() {
         .insert({ tipo: 'productos_compra', mapping: mappingToSave })
     }
 
-    setImportResult({ creados, actualizados, errores: errores.length })
+    setImportResult({ creados, actualizados, errores: errores.length, mensaje: msgs.join(' · ') })
     setErrorRows(errores)
     setImporting(false)
     setStep('done')
@@ -495,15 +592,26 @@ export default function CargaProductos() {
                 ))}
               </div>
 
-              <div className="mt-6 flex items-center gap-3 flex-wrap">
+              <div className="mt-6 flex flex-col gap-2">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={actualizar}
-                    onChange={(e) => setActualizar(e.target.checked)}
+                    checked={actualizarProducto}
+                    onChange={(e) => setActualizarProducto(e.target.checked)}
                     className="rounded"
                   />
-                  Si el producto ya existe (mismo nombre + proveedor), <strong>actualizarlo</strong>
+                  Si el producto ya existe (match por <strong>código interno</strong> o nombre),{' '}
+                  <strong>actualizar sus datos básicos</strong>
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={actualizarPrecioExistente}
+                    onChange={(e) => setActualizarPrecioExistente(e.target.checked)}
+                    className="rounded"
+                  />
+                  Si el (producto, proveedor) <strong>ya tiene precio activo</strong>, <strong>sobrescribirlo</strong>
+                  <span className="text-xs text-muted-foreground">(se preserva el histórico)</span>
                 </label>
               </div>
 
