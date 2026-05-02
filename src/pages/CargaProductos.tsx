@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Upload, FileUp, CheckCircle, AlertTriangle, X } from 'lucide-react'
+import { Upload, FileUp, CheckCircle, AlertTriangle, X, Download } from 'lucide-react'
 import Papa from 'papaparse'
 
 const EXPECTED_FIELDS = [
@@ -109,6 +109,47 @@ export default function CargaProductos() {
     loadSavedMapping()
     loadProveedores()
   }, [])
+
+  /** Descarga una plantilla CSV con las cabeceras y un ejemplo. */
+  function descargarPlantilla() {
+    // Usamos los labels (más legibles) como cabeceras del CSV
+    const headers = EXPECTED_FIELDS.map((f) => FIELD_LABELS[f].replace(' *', ''))
+    const ejemplo = [
+      'Empanada Carne Picante',  // nombre
+      'EMP-002',                  // cod_proveedor
+      'INT-002',                  // cod_interno
+      'Tio Bigotes',              // proveedor
+      '18.00',                    // precio (paquete)
+      'Reducido 10%',             // tipo_iva
+      'unidad',                   // unidad_medida
+      '12',                       // unidad_minima_compra (uds por paquete)
+      '0',                        // stock_minimo
+      'Lunes',                    // dia_pedido
+      'Miercoles',                // dia_entrega
+    ]
+    // Escapar valores que contengan coma/comilla/salto
+    const escape = (v: string) => {
+      if (v == null) return ''
+      const needs = /[",\n;]/.test(v)
+      const clean = v.replace(/"/g, '""')
+      return needs ? `"${clean}"` : clean
+    }
+    const lines = [
+      headers.map(escape).join(','),
+      ejemplo.map(escape).join(','),
+    ]
+    const csv = lines.join('\n')
+    // Añadir BOM UTF-8 para que Excel reconozca las tildes
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `plantilla_productos_compra_${new Date().toISOString().slice(0,10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   async function loadSavedMapping() {
     const { data } = await supabase
@@ -502,9 +543,17 @@ export default function CargaProductos() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3">
-        <Upload className="h-7 w-7 text-emerald-500" />
-        <h1 className="text-2xl font-bold">Carga de Productos</h1>
+      <div className="flex items-center gap-3 flex-wrap justify-between">
+        <div className="flex items-center gap-3">
+          <Upload className="h-7 w-7 text-emerald-500" />
+          <h1 className="text-2xl font-bold">Carga de Productos</h1>
+        </div>
+        {step === 'select' && (
+          <Button variant="outline" onClick={descargarPlantilla}>
+            <Download size={14} className="mr-1.5" />
+            Descargar plantilla CSV
+          </Button>
+        )}
       </div>
 
       {/* Step 1: select */}
@@ -537,16 +586,21 @@ export default function CargaProductos() {
               </div>
             )}
 
-            <div className="mt-6 rounded-lg bg-blue-50 p-4 text-sm text-blue-900">
-              <p className="font-medium mb-2">Columnas que se reconocen automáticamente:</p>
-              <p className="text-blue-800">
-                nombre, código proveedor, código interno, proveedor, precio, IVA, unidad de medida,
-                cantidad mínima, stock mínimo, día pedido, día entrega.
+            <div className="mt-6 rounded-lg bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+              <p className="font-medium mb-2">¿Primera vez? Empieza por la plantilla:</p>
+              <p className="mb-2">
+                Pulsa <strong>"Descargar plantilla CSV"</strong> arriba a la derecha. Te bajas un archivo
+                con las cabeceras correctas y una fila de ejemplo. Lo rellenas en Excel/LibreOffice
+                y lo subes aquí.
               </p>
-              <p className="mt-2 text-blue-800">
-                <strong>Nombre</strong> es obligatorio. Si tu archivo tiene la columna <em>proveedor</em> con el
-                nombre comercial, lo enlazo automáticamente. Los otros campos se pueden mapear manualmente
-                en el siguiente paso.
+              <p className="font-medium mt-3 mb-1">Columnas que se reconocen automáticamente:</p>
+              <p>
+                nombre, código proveedor, código interno, proveedor, precio (del paquete),
+                IVA, unidad de medida, cantidad mínima, stock mínimo, día pedido, día entrega.
+              </p>
+              <p className="mt-2">
+                <strong>Nombre</strong> es obligatorio. Si tu CSV tiene cabeceras distintas, en el siguiente
+                paso podrás mapearlas manualmente. La app guarda tu configuración para futuras importaciones.
               </p>
             </div>
           </CardContent>
