@@ -28,6 +28,7 @@ export interface ItemCatalogo {
   factor_conversion: number
   unidades_por_paquete: number | null
   precio: number | null
+  precio_paquete: number | null
   iva_pct: number | null
   descuento_pct: number | null
   cantidad_minima_pedido: number | null
@@ -63,6 +64,7 @@ export async function obtenerCatalogoProveedor(proveedorId: number): Promise<Ite
   return (data ?? []).map((r: any) => ({
     ...r,
     precio: r.precio != null ? Number(r.precio) : null,
+    precio_paquete: r.precio_paquete != null ? Number(r.precio_paquete) : null,
     iva_pct: r.iva_pct != null ? Number(r.iva_pct) : null,
     descuento_pct: r.descuento_pct != null ? Number(r.descuento_pct) : null,
     factor_conversion: Number(r.factor_conversion),

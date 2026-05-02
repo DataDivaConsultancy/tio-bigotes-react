@@ -440,9 +440,19 @@ export default function CrearPedido() {
                             )}
                           </td>
                           <td className="px-4 py-2 text-right tabular-nums">
-                            {tienePrecio
-                              ? (c.precio as number).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })
-                              : <span className="text-amber-600 text-xs font-medium">Sin precio</span>}
+                            {tienePrecio ? (
+                              <div>
+                                <div className="font-medium">
+                                  {((c.precio_paquete ?? (c.precio as number) * factor)).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 })}
+                                  <span className="text-[10px] text-muted-foreground"> /paq</span>
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">
+                                  unidad: {(c.precio as number).toLocaleString('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-amber-600 text-xs font-medium">Sin precio</span>
+                            )}
                           </td>
                           <td className="px-4 py-2 text-center">{tienePrecio ? `${iva}%` : '—'}</td>
                           <td className="px-4 py-2">
