@@ -15,6 +15,7 @@ interface Producto {
   id: number
   nombre: string
   categoria_id: number
+  categoria?: string | null
 }
 
 interface Categoria {
@@ -49,12 +50,10 @@ type Estrategia = 'Defensiva' | 'Equilibrada' | 'Agresiva'
 /* ================================================================== */
 /*  CONSTANTS                                                          */
 /* ================================================================== */
-const CATEGORY_LABELS: Record<number, string> = {
-  1: 'Empanada (legacy)',
-  40: 'Empanada Clásica',
-  41: 'Empanada Premium',
-}
-const DEFAULT_CATEGORIES = [40, 41]
+// Las categorías se cargan dinámicamente de BD (productos_v2 + categorias_producto_v2).
+// Los IDs concretos de las categorías "Empanada Clásica/Premium" pueden cambiar
+// si se borran y recrean. Buscamos por NOMBRE (case-insensitive) los defaults.
+const DEFAULT_CATEGORY_NAMES = ['empanada clásica', 'empanada clasica', 'empanada premium']
 const WEEKS_HISTORY = 8          // más semanas = más datos = mejor modelo
 const UDS_POR_HORNADA = 60
 const BUFFER_PCT = 0.30          // 30% safety buffer
@@ -477,7 +476,7 @@ function ConfianzaBadge({ level }: { level: 'alta' | 'media' | 'baja' }) {
 export default function Forecast() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
-  const [selectedCats, setSelectedCats] = useState<Set<number>>(new Set(DEFAULT_CATEGORIES))
+  const [selectedCats, setSelectedCats] = useState<Set<number>>(new Set())
   const [selectedProds, setSelectedProds] = useState<Set<number>>(new Set())
   const [forecastDate, setForecastDate] = useState(todayStr())
   const [estrategia, setEstrategia] = useState<Estrategia>('Equilibrada')
@@ -490,9 +489,10 @@ export default function Forecast() {
   /* ---------- Load productos + build category list ---------- */
   useEffect(() => {
     async function load() {
+      // Traer productos visibles en forecast + nombre de categoría desde la vista
       let { data, error } = await supabase
         .from('productos_v2')
-        .select('id, nombre, categoria_id')
+        .select('id, nombre, categoria_id, categoria')
         .eq('visible_en_forecast', true)
         .order('categoria_id')
         .order('nombre')
@@ -500,7 +500,7 @@ export default function Forecast() {
       if (error || !data || data.length === 0) {
         const res = await supabase
           .from('productos_v2')
-          .select('id, nombre, categoria_id')
+          .select('id, nombre, categoria_id, categoria')
           .order('categoria_id')
           .order('nombre')
         data = res.data
@@ -510,11 +510,23 @@ export default function Forecast() {
         setProductos(data)
         const catSet = new Map<number, string>()
         for (const p of data) {
-          if (!catSet.has(p.categoria_id)) {
-            catSet.set(p.categoria_id, CATEGORY_LABELS[p.categoria_id] || `Categoría ${p.categoria_id}`)
+          if (p.categoria_id != null && !catSet.has(p.categoria_id)) {
+            const label = (p.categoria as string | null) || `Categoría ${p.categoria_id}`
+            catSet.set(p.categoria_id, label)
           }
         }
-        setCategorias(Array.from(catSet.entries()).map(([id, label]) => ({ id, label })))
+        const cats = Array.from(catSet.entries()).map(([id, label]) => ({ id, label }))
+        setCategorias(cats)
+
+        // Auto-seleccionar las categorías "Empanada *" si existen.
+        // Reemplaza el DEFAULT_CATEGORIES hardcoded que apuntaba a IDs antiguos.
+        if (selectedCats.size === 0 || (selectedCats.size > 0 && !cats.some(c => selectedCats.has(c.id)))) {
+          const defaults = cats.filter(c =>
+            DEFAULT_CATEGORY_NAMES.some(n => c.label.toLowerCase().includes(n)),
+          ).map(c => c.id)
+          // Si no encontramos "Empanada *", seleccionamos todas (para que algo se vea).
+          setSelectedCats(new Set(defaults.length > 0 ? defaults : cats.map(c => c.id)))
+        }
       }
     }
     load()
