@@ -489,42 +489,47 @@ export default function Forecast() {
   /* ---------- Load productos + build category list ---------- */
   useEffect(() => {
     async function load() {
-      // Traer productos visibles en forecast + nombre de categoría desde la vista
-      let { data, error } = await supabase
-        .from('productos_v2')
-        .select('id, nombre, categoria_id, categoria')
-        .eq('visible_en_forecast', true)
-        .order('categoria_id')
-        .order('nombre')
-
+      // Cargar categorías y productos en paralelo
+      const [catsRes, prodVisRes] = await Promise.all([
+        supabase.from('categorias_producto_v2').select('id, nombre'),
+        supabase.from('productos_v2')
+          .select('id, nombre, categoria_id')
+          .eq('visible_en_forecast', true)
+          .order('categoria_id').order('nombre'),
+      ])
+      let data = prodVisRes.data
+      const error = prodVisRes.error
       if (error || !data || data.length === 0) {
         const res = await supabase
           .from('productos_v2')
-          .select('id, nombre, categoria_id, categoria')
-          .order('categoria_id')
-          .order('nombre')
+          .select('id, nombre, categoria_id')
+          .order('categoria_id').order('nombre')
         data = res.data
       }
+      // Map id → nombre de categoría (independiente del producto)
+      const catNombre = new Map<number, string>()
+      ;(catsRes.data ?? []).forEach((c: { id: number; nombre: string }) =>
+        catNombre.set(c.id, c.nombre),
+      )
 
       if (data && data.length > 0) {
         setProductos(data)
         const catSet = new Map<number, string>()
         for (const p of data) {
           if (p.categoria_id != null && !catSet.has(p.categoria_id)) {
-            const label = (p.categoria as string | null) || `Categoría ${p.categoria_id}`
+            const label = catNombre.get(p.categoria_id) || `Categoría ${p.categoria_id}`
             catSet.set(p.categoria_id, label)
           }
         }
         const cats = Array.from(catSet.entries()).map(([id, label]) => ({ id, label }))
         setCategorias(cats)
 
-        // Auto-seleccionar las categorías "Empanada *" si existen.
-        // Reemplaza el DEFAULT_CATEGORIES hardcoded que apuntaba a IDs antiguos.
+        // Auto-seleccionar las categorías 'Empanada *' si existen.
         if (selectedCats.size === 0 || (selectedCats.size > 0 && !cats.some(c => selectedCats.has(c.id)))) {
           const defaults = cats.filter(c =>
             DEFAULT_CATEGORY_NAMES.some(n => c.label.toLowerCase().includes(n)),
           ).map(c => c.id)
-          // Si no encontramos "Empanada *", seleccionamos todas (para que algo se vea).
+          // Si no encontramos 'Empanada *', seleccionamos TODAS (para que algo se vea).
           setSelectedCats(new Set(defaults.length > 0 ? defaults : cats.map(c => c.id)))
         }
       }
